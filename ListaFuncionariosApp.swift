@@ -86,47 +86,6 @@ struct ListaFuncionariosApp: App {
         WindowGroup {
             ZStack(alignment: .centerFirstTextBaseline) {
                 HomeView()
-
-
-                #if DEBUG
-                VStack(alignment: .listRowSeparatorLeading, spacing: 8) {
-                    Button(action: {
-                        let context = persistenceController.container.viewContext
-                        print("[Migration] Starting Core Data -> Firestore migration to 'employees' collection...")
-                        FirestoreMigrator.migrateFuncionariosToFirestore(from: context) { result in
-                            switch result {
-                            case .success(let count):
-                                print("[Migration] Completed successfully. Migrated documents: \(count)")
-                            case .failure(let error):
-                                print("[Migration] Failed with error: \(error.localizedDescription)")
-                            }
-
-                            // After employees migration, also migrate municipios via helper
-                            FirestoreMigrator.migrateMunicipiosToFirestore(from: context) { muniResult in
-                                switch muniResult {
-                                case .success(let count):
-                                    print("[Migration] Municipios migration completed. Migrated: \(count)")
-                                case .failure(let error):
-                                    print("[Migration] Municipios migration failed: \(error.localizedDescription)")
-                                }
-                            }
-                        }
-                    }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "arrow.up.doc")
-                            Text("Migrate to Firestore")
-                        }
-                        .font(.caption)
-                        .padding(8)
-                        .background(Color.blue.opacity(0.9))
-                        .foregroundColor(.white)
-                        .clipShape(Capsule())
-                        .shadow(radius: 4)
-                    }
-                    .accessibilityLabel("Migrate Core Data to Firestore")
-                }
-                .padding([.trailing, .bottom])
-                #endif
             }
             .task { SecurityConfigurator.applyFileProtection() }
             .task {
