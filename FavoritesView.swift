@@ -19,7 +19,6 @@ struct FavoritesView: View {
     ) private var municipiosFavoritos: FetchedResults<Municipio>
     
     @State private var selectedSegment: Segment = .employees
-    @State private var mostrandoDetalhes = false
     @State private var funcionarioSelecionado: Funcionario? = nil
     @AppStorage("app_zoom_scale") private var persistedZoom: Double = 1.35
     
@@ -55,9 +54,7 @@ struct FavoritesView: View {
                             )
                         } else {
                             ForEach(favoritos, id: \.objectID) { f in
-                                NavigationLink(destination: FuncionarioDetailView(funcionario: f)) {
-                                    cardFuncionario(f)
-                                }
+                                cardFuncionario(f)
                             }
                         }
                         
@@ -137,9 +134,27 @@ struct FavoritesView: View {
     
     // MARK: - Card Funcionário
     private func cardFuncionario(_ f: Funcionario) -> some View {
-        VStack(alignment: .center, spacing: 20) {
-            FuncionarioRowViewV2(funcionario: f)
+        HStack(spacing: 8) {
+            NavigationLink(destination: FuncionarioDetailView(funcionario: f)) {
+                FuncionarioRowViewV2(funcionario: f, showsFavorite: false)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                funcionarioSelecionado = f
+            } label: {
+                Image(systemName: "pencil")
+                    .foregroundStyle(.blue)
+                    .frame(width: 36, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Editar funcionário")
+
+            favoriteButton(for: f)
         }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(.quaternary, lineWidth: 0.5))
         .padding(.vertical, 6)
@@ -184,6 +199,37 @@ struct FavoritesView: View {
         for f in favoritos { f.favorito = false }
         save()
         NotificationCenter.default.post(name: .funcionarioAtualizado, object: nil)
+    }
+
+    private func toggleFavorite(_ funcionario: Funcionario) {
+        funcionario.favorito.toggle()
+
+        do {
+            try viewContext.save()
+            NotificationCenter.default.post(name: .funcionarioAtualizado, object: nil)
+            FirestoreMigrator.uploadFuncionario(objectID: funcionario.objectID, context: viewContext) { result in
+                switch result {
+                case .success:
+                    print("[Favorites] Favorito atualizado no Firestore")
+                case .failure(let error):
+                    print("[Favorites] Erro ao atualizar favorito: \(error.localizedDescription)")
+                }
+            }
+        } catch {
+            print("Erro ao salvar favorito: \(error.localizedDescription)")
+        }
+    }
+
+    private func favoriteButton(for funcionario: Funcionario) -> some View {
+        Button {
+            withAnimation { toggleFavorite(funcionario) }
+        } label: {
+            Image(systemName: funcionario.favorito ? "star.fill" : "star")
+                .foregroundColor(funcionario.favorito ? .yellow : .gray)
+                .frame(width: 36, height: 44)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(funcionario.favorito ? "Remover dos favoritos" : "Adicionar aos favoritos")
     }
     
     private func removeAllFavoritesMunicipios() {

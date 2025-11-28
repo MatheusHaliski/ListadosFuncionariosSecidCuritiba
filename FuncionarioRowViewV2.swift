@@ -2,8 +2,14 @@ import SwiftUI
 
 struct FuncionarioRowViewV2: View {
     let funcionario: Funcionario
+    let showsFavorite: Bool
     @State private var image: UIImage? = nil
     @State private var isLoadingImage = false
+
+    init(funcionario: Funcionario, showsFavorite: Bool = true) {
+        self.funcionario = funcionario
+        self.showsFavorite = showsFavorite
+    }
 
     var body: some View {
         HStack(spacing: 16) {
@@ -41,7 +47,7 @@ struct FuncionarioRowViewV2: View {
                 }
             }
             Spacer()
-            if funcionario.favorito {
+            if showsFavorite, funcionario.favorito {
                 Image(systemName: "star.fill")
                     .foregroundColor(.yellow)
                     .accessibilityLabel("Favorito")
