@@ -1,5 +1,9 @@
 import SwiftUI
 import CoreData
+#if os(iOS)
+import UIKit
+import PhotosUI
+#endif
 
 struct BuscarFuncionarioView: View {
     @Environment(\.managedObjectContext) private var context
@@ -99,11 +103,54 @@ struct EditFuncionarioPlaceholderView: View {
     @State private var funcao: String = ""
     @State private var regional: String = ""
     @State private var favorito: Bool = false
+    @State private var imagemData: Data? = nil
+    #if os(iOS)
+    @State private var fotoItem: PhotosPickerItem?
+    #endif
     @State private var showingValidationAlert = false
 
     var body: some View {
         NavigationStack {
             Form {
+                #if os(iOS)
+                Section("Imagem") {
+                    VStack(spacing: 12) {
+                        if let imagemData, let uiImage = UIImage(data: imagemData) {
+                            Image(uiImage: uiImage)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 120, height: 120)
+                                .clipShape(Circle())
+                                .overlay(Circle().stroke(Color.primary.opacity(0.2), lineWidth: 1))
+                        } else {
+                            Image(systemName: "person.crop.circle.fill")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 120, height: 120)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        #if canImport(PhotosUI)
+                        PhotosPicker(selection: $fotoItem, matching: .images) {
+                            Label("Selecionar foto", systemImage: "photo.on.rectangle")
+                        }
+                        .onChange(of: fotoItem) { newItem in
+                            guard let newItem else { return }
+                            Task {
+                                if let data = try? await newItem.loadTransferable(type: Data.self) {
+                                    await MainActor.run {
+                                        imagemData = data
+                                    }
+                                }
+                            }
+                        }
+                        #endif
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 4)
+                }
+                #endif
+
                 Section("Informações") {
                     TextField("Nome", text: $nome)
                         .textInputAutocapitalization(.words)
@@ -135,6 +182,7 @@ struct EditFuncionarioPlaceholderView: View {
                 funcao = funcionario.funcao ?? ""
                 regional = funcionario.regional ?? ""
                 favorito = funcionario.favorito
+                imagemData = funcionario.imagem
             }
             .alert("Preencha o nome", isPresented: $showingValidationAlert) {
                 Button("OK", role: .cancel) { }
@@ -153,6 +201,7 @@ struct EditFuncionarioPlaceholderView: View {
         funcionario.funcao = funcao.trimmingCharacters(in: .whitespacesAndNewlines)
         funcionario.regional = regional.trimmingCharacters(in: .whitespacesAndNewlines)
         funcionario.favorito = favorito
+        funcionario.imagem = imagemData
 
         do {
             try context.save()
