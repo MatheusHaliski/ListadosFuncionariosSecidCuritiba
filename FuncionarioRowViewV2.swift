@@ -58,33 +58,11 @@ struct FuncionarioRowViewV2: View {
     }
 
     private func loadImage() {
-        // Try Core Data binary image first (Data)
+        // Images must come from Core Data only. If the record doesn't have binary data yet,
+        // we intentionally keep showing the placeholder instead of re-downloading from Firebase.
         if let imageData = funcionario.imagem as? Data, let uiImage = UIImage(data: imageData) {
             self.image = uiImage
-            return
         }
-
-        // Try URL string next (if the model stores a URL string)
-        if let urlString = funcionario.imagem as? String, let url = URL(string: urlString) {
-            isLoadingImage = true
-            ImageStorage.downloadImage(from: url) { result in
-                DispatchQueue.main.async {
-                    isLoadingImage = false
-                    switch result {
-                    case .success(let data):
-                        if let uiImage = UIImage(data: data) {
-                            self.image = uiImage
-                        }
-                    case .failure:
-                        // Fallback image already handled by default state
-                        break
-                    }
-                }
-            }
-            return
-        }
-
-        // If neither Data nor a valid URL string is available, keep showing the placeholder
     }
 }
 

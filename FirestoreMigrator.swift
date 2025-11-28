@@ -224,6 +224,7 @@ struct FirestoreMigrator {
                     funcionario.regional = data["regional"] as? String
 
                     let imageURLString = (data["imageURL"] as? String) ?? (data["imagemURL"] as? String)
+                    funcionario.imagemURL = imageURLString
                     updatedCount += 1
 
                     if let urlStr = imageURLString, let url = URL(string: urlStr) {
