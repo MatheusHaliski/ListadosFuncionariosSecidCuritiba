@@ -201,6 +201,34 @@ struct HomeView: View {
                         Label("Theme", systemImage: "moon.circle")
                     }
                 }
+
+                #if DEBUG
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: {
+                        let context = PersistenceController.shared.container.viewContext
+                        print("[Migration] Starting Core Data -> Firestore migration to 'employees' collection...")
+                        FirestoreMigrator.migrateFuncionariosToFirestore(from: context) { result in
+                            switch result {
+                            case .success(let count):
+                                print("[Migration] Completed successfully. Migrated documents: \(count)")
+                            case .failure(let error):
+                                print("[Migration] Failed with error: \(error.localizedDescription)")
+                            }
+                            FirestoreMigrator.migrateMunicipiosToFirestore(from: context) { muniResult in
+                                switch muniResult {
+                                case .success(let count):
+                                    print("[Migration] Municipios migration completed. Migrated: \(count)")
+                                case .failure(let error):
+                                    print("[Migration] Municipios migration failed: \(error.localizedDescription)")
+                                }
+                            }
+                        }
+                    }) {
+                        Label("Migrate to Firestore", systemImage: "arrow.up.doc")
+                    }
+                }
+                #endif
+
                 ToolbarItem(placement: .navigationBarTrailing) {
                     ZoomMenuButton(persistedZoom: $persistedZoom)
                 }
