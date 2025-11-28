@@ -9,6 +9,7 @@ struct BuscarFuncionarioView: View {
     ) private var funcionarios: FetchedResults<Funcionario>
     
     @State private var searchText = ""
+    @State private var funcionarioParaEditar: Funcionario?
     
     var filteredFuncionarios: [Funcionario] {
         guard !searchText.isEmpty else { return Array(funcionarios) }
@@ -23,8 +24,22 @@ struct BuscarFuncionarioView: View {
         NavigationStack {
             List {
                 ForEach(filteredFuncionarios, id: \.objectID) { funcionario in
-                    NavigationLink(destination: FuncionarioDetailView(funcionario: funcionario)) {
-                        FuncionarioRowViewV2(funcionario: funcionario)
+                    HStack(spacing: 0) {
+                        NavigationLink(destination: FuncionarioDetailView(funcionario: funcionario)) {
+                            FuncionarioRowViewV2(funcionario: funcionario, showsFavorite: false)
+                        }
+                        Button {
+                            funcionarioParaEditar = funcionario
+                        } label: {
+                            Image(systemName: "pencil")
+                                .foregroundStyle(.blue)
+                                .frame(width: 36, height: 44)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Editar funcionário")
+                        .padding(.trailing, 4)
+                        favoriteButton(for: funcionario)
+                            .padding(.trailing, 4)
                     }
                 }
                 if filteredFuncionarios.isEmpty {
@@ -35,6 +50,124 @@ struct BuscarFuncionarioView: View {
             }
             .navigationTitle("Buscar Funcionário")
             .searchable(text: $searchText, prompt: "Buscar por nome, função ou regional")
+            .sheet(item: $funcionarioParaEditar) { funcionario in
+                // Substitua `EditFuncionarioView` pelo seu editor real, se existir
+                EditFuncionarioPlaceholderView(funcionario: funcionario)
+                    .presentationDetents([.medium, .large])
+            }
+        }
+    }
+
+    private func favoriteButton(for funcionario: Funcionario) -> some View {
+        Button {
+            withAnimation { toggleFavorite(funcionario) }
+        } label: {
+            Image(systemName: funcionario.favorito ? "star.fill" : "star")
+                .foregroundColor(funcionario.favorito ? .yellow : .gray)
+                .frame(width: 36, height: 44)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(funcionario.favorito ? "Remover dos favoritos" : "Adicionar aos favoritos")
+    }
+
+    private func toggleFavorite(_ funcionario: Funcionario) {
+        funcionario.favorito.toggle()
+
+        do {
+            try context.save()
+            NotificationCenter.default.post(name: .funcionarioAtualizado, object: nil)
+            FirestoreMigrator.uploadFuncionario(objectID: funcionario.objectID, context: context) { result in
+                switch result {
+                case .success:
+                    print("[BuscarFuncionario] Favorito atualizado no Firestore")
+                case .failure(let error):
+                    print("[BuscarFuncionario] Erro ao atualizar favorito: \(error.localizedDescription)")
+                }
+            }
+        } catch {
+            print("Erro ao salvar favorito: \(error.localizedDescription)")
+        }
+    }
+}
+
+struct EditFuncionarioPlaceholderView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.managedObjectContext) private var context
+    @ObservedObject var funcionario: Funcionario
+
+    @State private var nome: String = ""
+    @State private var funcao: String = ""
+    @State private var regional: String = ""
+    @State private var favorito: Bool = false
+    @State private var showingValidationAlert = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Informações") {
+                    TextField("Nome", text: $nome)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled(false)
+                    TextField("Função", text: $funcao)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled(false)
+                    TextField("Regional", text: $regional)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled(false)
+                }
+                Section("Favorito") {
+                    Toggle("Marcar como favorito", isOn: $favorito)
+                }
+            }
+            .navigationTitle("Editar Funcionário")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancelar") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Salvar") { saveChanges() }
+                        .disabled(nome.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .onAppear {
+                // Initialize state from the current Core Data object
+                nome = funcionario.nome ?? ""
+                funcao = funcionario.funcao ?? ""
+                regional = funcionario.regional ?? ""
+                favorito = funcionario.favorito
+            }
+            .alert("Preencha o nome", isPresented: $showingValidationAlert) {
+                Button("OK", role: .cancel) { }
+            }
+        }
+    }
+
+    private func saveChanges() {
+        let trimmedName = nome.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            showingValidationAlert = true
+            return
+        }
+
+        funcionario.nome = trimmedName
+        funcionario.funcao = funcao.trimmingCharacters(in: .whitespacesAndNewlines)
+        funcionario.regional = regional.trimmingCharacters(in: .whitespacesAndNewlines)
+        funcionario.favorito = favorito
+
+        do {
+            try context.save()
+            NotificationCenter.default.post(name: .funcionarioAtualizado, object: nil)
+            FirestoreMigrator.uploadFuncionario(objectID: funcionario.objectID, context: context) { result in
+                switch result {
+                case .success:
+                    print("[EditarFuncionario] Funcionário atualizado no Firestore")
+                case .failure(let error):
+                    print("[EditarFuncionario] Erro ao atualizar: \(error.localizedDescription)")
+                }
+            }
+            dismiss()
+        } catch {
+            print("Erro ao salvar alterações: \(error.localizedDescription)")
         }
     }
 }
