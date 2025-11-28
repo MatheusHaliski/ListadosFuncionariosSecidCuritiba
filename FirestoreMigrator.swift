@@ -17,9 +17,14 @@ struct FirestoreMigrator {
                 group.enter()
                 var data: [String: Any] = [
                     "nome": funcionario.nome ?? "",
+                    // Persist both keys for backward compatibility with existing Firestore docs
+                    "funcao": funcionario.funcao ?? "",
                     "cargo": funcionario.funcao ?? "",
                     "favorito": funcionario.favorito,
-                    "regional": funcionario.regional ?? ""
+                    "regional": funcionario.regional ?? "",
+                    "ramal": funcionario.ramal ?? "",
+                    "celular": funcionario.celular ?? "",
+                    "email": funcionario.email ?? ""
                 ]
                 if let imageData = funcionario.imagem,
                    let id = funcionario.id?.uuidString {
@@ -75,12 +80,16 @@ struct FirestoreMigrator {
 
             let db = Firestore.firestore()
 
-            // Prepare base data
+            // Prepare base data (always mirror Core Data fields)
             var data: [String: Any] = [
                 "nome": funcionario.nome ?? "",
-                "cargo": funcionario.funcao ?? "",
+                "funcao": funcionario.funcao ?? "",
+                "cargo": funcionario.funcao ?? "", // backward compatibility
                 "favorito": funcionario.favorito,
-                "regional": funcionario.regional ?? ""
+                "regional": funcionario.regional ?? "",
+                "ramal": funcionario.ramal ?? "",
+                "celular": funcionario.celular ?? "",
+                "email": funcionario.email ?? ""
             ]
 
             // Helper to save the document after optional image upload
@@ -200,33 +209,46 @@ struct FirestoreMigrator {
                 group.enter()
                 let data = doc.data()
                 let idStr = doc.documentID
-                let request: NSFetchRequest<Funcionario> = Funcionario.fetchRequest()
-                request.predicate = NSPredicate(format: "id == %@", UUID(uuidString: idStr) as CVarArg? ?? "")
-                let funcionario = (try? context.fetch(request))?.first ?? Funcionario(context: context)
-                funcionario.id = UUID(uuidString: idStr)
-                funcionario.nome = data["nome"] as? String
-                funcionario.funcao = data["funcao"] as? String
-                funcionario.favorito = data["favorito"] as? Bool ?? false
-                funcionario.regional = data["regional"] as? String
-                if let urlStr = data["imageURL"] as? String, let url = URL(string: urlStr) {
-                    ImageStorage.downloadImage(from: url) { result in
-                        if case .success(let imageData) = result {
-                            funcionario.imagem = imageData
+
+                context.perform {
+                    let request: NSFetchRequest<Funcionario> = Funcionario.fetchRequest()
+                    request.predicate = NSPredicate(format: "id == %@", UUID(uuidString: idStr) as CVarArg? ?? "")
+                    let funcionario = (try? context.fetch(request))?.first ?? Funcionario(context: context)
+                    funcionario.id = UUID(uuidString: idStr) ?? UUID()
+                    funcionario.nome = data["nome"] as? String
+                    funcionario.funcao = (data["funcao"] as? String) ?? (data["cargo"] as? String)
+                    funcionario.ramal = data["ramal"] as? String
+                    funcionario.celular = data["celular"] as? String
+                    funcionario.email = data["email"] as? String
+                    funcionario.favorito = data["favorito"] as? Bool ?? false
+                    funcionario.regional = data["regional"] as? String
+
+                    let imageURLString = (data["imageURL"] as? String) ?? (data["imagemURL"] as? String)
+                    updatedCount += 1
+
+                    if let urlStr = imageURLString, let url = URL(string: urlStr) {
+                        ImageStorage.downloadImage(from: url) { result in
+                            context.perform {
+                                if case .success(let imageData) = result {
+                                    funcionario.imagem = imageData
+                                }
+                                group.leave()
+                            }
                         }
+                    } else {
                         group.leave()
                     }
-                } else {
-                    group.leave()
                 }
-                updatedCount += 1
             }
 
             group.notify(queue: .main) {
-                do {
-                    try context.save()
-                    completion(.success(updatedCount))
-                } catch {
-                    completion(.failure(error))
+                context.perform {
+                    do {
+                        try context.save()
+                        completion(.success(updatedCount))
+                    } catch {
+                        completion(.failure(error))
+                    }
                 }
             }
         }
