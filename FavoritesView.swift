@@ -21,6 +21,7 @@ struct FavoritesView: View {
     @State private var selectedSegment: Segment = .employees
     @State private var funcionarioSelecionado: Funcionario? = nil
     @AppStorage("app_zoom_scale") private var persistedZoom: Double = 1.35
+    @State private var didSyncFromFirestore = false
     
     private enum Segment: String, CaseIterable, Identifiable {
         case employees = "Funcionarios"
@@ -96,6 +97,18 @@ struct FavoritesView: View {
             }
             ToolbarItem(placement: .navigationBarTrailing) {
                 ZoomMenuButton(persistedZoom: $persistedZoom)
+            }
+        }
+        .task {
+            guard !didSyncFromFirestore else { return }
+            didSyncFromFirestore = true
+            FirestoreMigrator.syncFromFirestoreToCoreData(context: viewContext) { result in
+                switch result {
+                case .success(let count):
+                    print("[Favorites] Synced \(count) funcionários from Firestore → Core Data")
+                case .failure(let error):
+                    print("[Favorites] Sync error: \(error.localizedDescription)")
+                }
             }
         }
         

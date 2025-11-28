@@ -14,6 +14,7 @@ struct BuscarFuncionarioView: View {
     
     @State private var searchText = ""
     @State private var funcionarioParaEditar: Funcionario?
+    @State private var didSyncFromFirestore = false
     
     var filteredFuncionarios: [Funcionario] {
         guard !searchText.isEmpty else { return Array(funcionarios) }
@@ -58,6 +59,18 @@ struct BuscarFuncionarioView: View {
                 // Substitua `EditFuncionarioView` pelo seu editor real, se existir
                 EditFuncionarioPlaceholderView(funcionario: funcionario)
                     .presentationDetents([.medium, .large])
+            }
+        }
+        .task {
+            guard !didSyncFromFirestore else { return }
+            didSyncFromFirestore = true
+            FirestoreMigrator.syncFromFirestoreToCoreData(context: context) { result in
+                switch result {
+                case .success(let count):
+                    print("[BuscarFuncionario] Synced \(count) funcionários from Firestore → Core Data")
+                case .failure(let error):
+                    print("[BuscarFuncionario] Sync error: \(error.localizedDescription)")
+                }
             }
         }
     }
