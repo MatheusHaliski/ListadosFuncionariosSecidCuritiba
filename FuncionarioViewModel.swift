@@ -6,21 +6,39 @@
 //
 
 import Foundation
-import CoreData
+internal import CoreData
 import SwiftUI
 import FirebaseFirestore
 import FirebaseCore
+import Combine
 
-class FuncionarioViewModel: ObservableObject{
+@MainActor
+final class FuncionarioViewModel: ObservableObject {
+    let objectWillChange = ObservableObjectPublisher()
+    
     @Published var funcionarios: [Funcionario] = []
 
     private var context: NSManagedObjectContext
 
-    @MainActor
-    init(context: NSManagedObjectContext = PersistenceController.shared.container.viewContext) {
+    init() {
+        self.objectWillChange.send() // optional early signal; harmless
+        self.context = PersistenceController.shared.container.viewContext
+        // Defer fetch until after initialization completes
+        Task { [weak self] in
+            await MainActor.run {
+                self?.fetchFuncionarios()
+            }
+        }
+    }
+
+    init(context: NSManagedObjectContext) {
+        self.objectWillChange.send() // optional early signal; harmless
         self.context = context
-        // Fetch inicial na inicialização
-        fetchFuncionarios()
+        Task { [weak self] in
+            await MainActor.run {
+                self?.fetchFuncionarios()
+            }
+        }
     }
 
     // Injects a context coming from the SwiftUI environment
@@ -361,3 +379,4 @@ extension FuncionarioViewModel {
         }
     }
 }
+
