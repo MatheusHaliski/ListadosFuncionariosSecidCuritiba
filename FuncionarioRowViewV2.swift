@@ -1,4 +1,5 @@
 import SwiftUI
+internal import CoreData
 
 struct FuncionarioRowViewV2: View {
     let funcionario: Funcionario
@@ -75,3 +76,4 @@ struct FuncionarioRowViewV2: View {
     funcionario.favorito = true
     return FuncionarioRowViewV2(funcionario: funcionario)
 }
+
