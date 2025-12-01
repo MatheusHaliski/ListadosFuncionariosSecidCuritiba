@@ -1,16 +1,20 @@
 import SwiftUI
 import Combine
-import CoreData
+internal import CoreData
+import Darwin
+
+#if canImport(FirebaseCore)
 import FirebaseCore
-#if canImport(FirebaseFirestore)
-import FirebaseFirestore
 #endif
+
 
 #if canImport(FirebaseCrashlytics)
 import FirebaseCrashlytics
 #endif
-import FirebaseAppCheck  
-import Darwin
+
+#if canImport(FirebaseAppCheck)
+import FirebaseAppCheck
+#endif
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
 
@@ -32,22 +36,29 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         // 🔥 APP CHECK DEBUG MODE (ATIVAR ANTES DO FIREBASE CONFIGURE)
         // -----------------------------------------------------------
         #if DEBUG
+        #if canImport(FirebaseAppCheck)
         print("[AppCheck] DEBUG MODE ENABLED")
         AppCheck.setAppCheckProviderFactory(AppCheckDebugProviderFactory())
-
+        #else
+        print("[AppCheck] FirebaseAppCheck not available; skipping AppCheck debug setup.")
+        #endif
         // Agora você consegue chamar isto SEM CRASH:
         funcionarioViewModel.resetToDefaultMode()
         print("[Launch] resetToDefaultMode() executed")
         #endif
         // -----------------------------------------------------------
 
-        // Inicializa Firebase
+        // Inicializa Firebase (apenas se FirebaseCore estiver disponível)
+        #if canImport(FirebaseCore)
         if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
             FirebaseApp.configure()
             print("[Firebase] FirebaseApp.configure() called.")
         } else {
             print("[Firebase] GoogleService-Info.plist not found.")
         }
+        #else
+        print("[Firebase] FirebaseCore not available; skipping FirebaseApp.configure().")
+        #endif
 
         return true
     }
@@ -87,10 +98,13 @@ struct ListaFuncionariosApp: App {
             ZStack(alignment: .centerFirstTextBaseline) {
                 HomeView()
             }
-            .task { SecurityConfigurator.applyFileProtection() }
             .task {
+                // Ensure file protection is applied as a side-effect during app launch
+                SecurityConfigurator.applyFileProtection()
+
                 // One-time automatic migration guard using UserDefaults
                 let didMigrateKey = "didMigrateFuncionariosToFirestore"
+                #if canImport(FirebaseCore)
                 if UserDefaults.standard.bool(forKey: didMigrateKey) == false {
                     if FirebaseApp.app() != nil {
                         let context = persistenceController.container.viewContext
@@ -110,6 +124,9 @@ struct ListaFuncionariosApp: App {
                 } else {
                     print("[Migration] Auto-migration already performed previously. Skipping.")
                 }
+                #else
+                print("[Migration] FirebaseCore not available; skipping auto-migration.")
+                #endif
             }
             .environment(\.managedObjectContext, persistenceController.container.viewContext)
             .environmentObject(funcionarioVM)
