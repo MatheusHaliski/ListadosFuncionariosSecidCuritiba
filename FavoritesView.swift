@@ -1,6 +1,5 @@
 import SwiftUI
 internal import CoreData
-import Combine
 
 struct FavoritesView: View {
     @Environment(\.managedObjectContext) private var viewContext
@@ -164,8 +163,6 @@ struct FavoritesView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Editar funcionário")
-
-            favoriteButton(for: f)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
@@ -213,47 +210,6 @@ struct FavoritesView: View {
         for f in favoritos { f.favorito = false }
         save()
         NotificationCenter.default.post(name: .funcionarioAtualizado, object: nil)
-    }
-
-    private func toggleFavorite(_ funcionario: Funcionario) {
-        funcionario.favorito.toggle()
-
-        do {
-            try viewContext.save()
-            NotificationCenter.default.post(name: .funcionarioAtualizado, object: nil)
-            FirestoreMigrator.uploadFuncionario(objectID: funcionario.objectID, context: viewContext) { result in
-                switch result {
-                case .success:
-                    print("[Favorites] Favorito atualizado no Firestore")
-                case .failure(let error):
-                    print("[Favorites] Erro ao atualizar favorito: \(error.localizedDescription)")
-                }
-            }
-        } catch {
-            print("Erro ao salvar favorito: \(error.localizedDescription)")
-        }
-    }
-
-    private func favoriteButton(for funcionario: Funcionario) -> some View {
-        Button {
-            #if os(iOS)
-            let generator = UIImpactFeedbackGenerator(style: .light)
-            generator.impactOccurred()
-            #endif
-            withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
-                toggleFavorite(funcionario)
-            }
-        } label: {
-            Image(systemName: funcionario.favorito ? "star.fill" : "star")
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundColor(funcionario.favorito ? .yellow : .gray)
-                .frame(width: 56, height: 56)
-                .background(Circle().fill(Color(.systemBackground)))
-                .overlay(Circle().stroke(Color.black.opacity(0.4), lineWidth: 1))
-                .shadow(radius: 2)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(funcionario.favorito ? "Remover dos favoritos" : "Adicionar aos favoritos")
     }
     
     private func removeAllFavoritesMunicipios() {
