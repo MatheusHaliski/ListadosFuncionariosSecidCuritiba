@@ -1,5 +1,6 @@
 import SwiftUI
-import CoreData
+internal import CoreData
+import Combine
 
 struct FavoritesView: View {
     @Environment(\.managedObjectContext) private var viewContext
@@ -285,4 +286,3 @@ struct FavoritesView: View {
 extension NSNotification.Name {
     static let funcionarioAtualizado = NSNotification.Name("funcionarioAtualizado")
 }
-
