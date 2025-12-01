@@ -1,5 +1,5 @@
 import SwiftUI
-import CoreData
+internal import CoreData
 #if os(iOS)
 import UIKit
 import PhotosUI
@@ -61,7 +61,7 @@ struct BuscarFuncionarioView: View {
                     .presentationDetents([.medium, .large])
             }
         }
-        .task {
+        .task(id: "firestoreSyncOnce") {
             guard !didSyncFromFirestore else { return }
             didSyncFromFirestore = true
             FirestoreMigrator.syncFromFirestoreToCoreData(context: context) { result in
@@ -74,36 +74,28 @@ struct BuscarFuncionarioView: View {
             }
         }
     }
-
+    
+    @ViewBuilder
     private func favoriteButton(for funcionario: Funcionario) -> some View {
         Button {
-            withAnimation { toggleFavorite(funcionario) }
+            // Toggle immediately for instant UI feedback
+            funcionario.favorito.toggle()
+            // Persist change without blocking UI
+            do {
+                try context.save()
+            } catch {
+                // If save fails, revert and log
+                funcionario.favorito.toggle()
+                print("[BuscarFuncionario] Failed to save favorite change: \(error.localizedDescription)")
+            }
         } label: {
             Image(systemName: funcionario.favorito ? "star.fill" : "star")
-                .foregroundColor(funcionario.favorito ? .yellow : .gray)
+                .foregroundStyle(funcionario.favorito ? .yellow : .secondary)
                 .frame(width: 36, height: 44)
+                .contentShape(Rectangle())
+                .accessibilityLabel(funcionario.favorito ? "Remover dos favoritos" : "Marcar como favorito")
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(funcionario.favorito ? "Remover dos favoritos" : "Adicionar aos favoritos")
-    }
-
-    private func toggleFavorite(_ funcionario: Funcionario) {
-        funcionario.favorito.toggle()
-
-        do {
-            try context.save()
-            NotificationCenter.default.post(name: .funcionarioAtualizado, object: nil)
-            FirestoreMigrator.uploadFuncionario(objectID: funcionario.objectID, context: context) { result in
-                switch result {
-                case .success:
-                    print("[BuscarFuncionario] Favorito atualizado no Firestore")
-                case .failure(let error):
-                    print("[BuscarFuncionario] Erro ao atualizar favorito: \(error.localizedDescription)")
-                }
-            }
-        } catch {
-            print("Erro ao salvar favorito: \(error.localizedDescription)")
-        }
     }
 }
 
@@ -238,3 +230,4 @@ struct EditFuncionarioPlaceholderView: View {
     BuscarFuncionarioView()
         .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
 }
+
