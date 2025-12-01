@@ -160,7 +160,7 @@ struct FavoritesView: View {
             } label: {
                 Image(systemName: "pencil")
                     .foregroundStyle(.blue)
-                    .frame(width: 36, height: 44)
+                    .frame(width: 44, height: 56)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Editar funcionário")
@@ -236,11 +236,21 @@ struct FavoritesView: View {
 
     private func favoriteButton(for funcionario: Funcionario) -> some View {
         Button {
-            withAnimation { toggleFavorite(funcionario) }
+            #if os(iOS)
+            let generator = UIImpactFeedbackGenerator(style: .light)
+            generator.impactOccurred()
+            #endif
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                toggleFavorite(funcionario)
+            }
         } label: {
             Image(systemName: funcionario.favorito ? "star.fill" : "star")
+                .font(.system(size: 22, weight: .semibold))
                 .foregroundColor(funcionario.favorito ? .yellow : .gray)
-                .frame(width: 36, height: 44)
+                .frame(width: 56, height: 56)
+                .background(Circle().fill(Color(.systemBackground)))
+                .overlay(Circle().stroke(Color.black.opacity(0.4), lineWidth: 1))
+                .shadow(radius: 2)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(funcionario.favorito ? "Remover dos favoritos" : "Adicionar aos favoritos")
