@@ -3,7 +3,9 @@ import SwiftUI
 struct FuncionarioDetailView: View {
     let funcionario: Funcionario
     let onEdit: (() -> Void)? = nil
-
+    
+    @State private var mostrandoEdicao = false
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -51,8 +53,19 @@ struct FuncionarioDetailView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Editar", action: onEdit)
                 }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Editar") { mostrandoEdicao = true }
+                }
+            }
+        }
+        .sheet(isPresented: $mostrandoEdicao) {
+            NavigationStack {
+                FuncionarioFormView(
+                    regional: funcionario.regional ?? "",
+                    funcionario: funcionario,
+                    isEditando: true
+                )
             }
         }
     }
 }
-
