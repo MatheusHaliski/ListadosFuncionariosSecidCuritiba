@@ -1,4 +1,5 @@
 import SwiftUI
+internal import CoreData
 
 // MARK: - Shared Zoom Environment
 private struct AppZoomScaleKey: EnvironmentKey {
