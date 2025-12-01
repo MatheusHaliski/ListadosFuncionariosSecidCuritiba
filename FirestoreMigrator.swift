@@ -4,6 +4,14 @@ import FirebaseFirestore
 import FirebaseStorage
 
 struct FirestoreMigrator {
+    // Firestore document IDs must not contain '/'. This helper creates a safe ID from any string.
+    private static func firestoreSafeID(from raw: String) -> String {
+        // Replace all '/' with '_' and remove spaces
+        let replaced = raw.replacingOccurrences(of: "/", with: "_")
+        // Firestore allows most characters; keep it simple and trim whitespace
+        return replaced.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     static func migrateFuncionariosToFirestore(from context: NSManagedObjectContext, completion: @escaping (Result<Int, Error>) -> Void) {
         let fetchRequest: NSFetchRequest<Funcionario> = Funcionario.fetchRequest()
         do {
@@ -61,8 +69,53 @@ struct FirestoreMigrator {
     }
 
     static func migrateMunicipiosToFirestore(from context: NSManagedObjectContext, completion: @escaping (Result<Int, Error>) -> Void) {
-        // TODO: Implement similar migration for municipios if needed
-        completion(.success(0))
+        let fetchRequest: NSFetchRequest<Municipio> = Municipio.fetchRequest()
+
+               do {
+                   let municipios = try context.fetch(fetchRequest)
+                   let db = Firestore.firestore()
+                   let group = DispatchGroup()
+                   var migratedCount = 0
+                   var lastError: Error?
+
+                   for municipio in municipios {
+                       group.enter()
+
+                       var data: [String: Any] = [
+                           "nome": municipio.nome ?? "",
+                           "regional": municipio.regional ?? "",
+                           "favorito": municipio.favorito
+                       ]
+
+                       let docId: String
+                       if let uuid = municipio.id as? UUID {
+                           docId = uuid.uuidString
+                       } else {
+                           // Stable fallback using Core Data objectID URI, sanitized for Firestore
+                           let uriString = municipio.objectID.uriRepresentation().absoluteString
+                           docId = firestoreSafeID(from: uriString)
+                       }
+
+                       db.collection("municipios").document(docId).setData(data) { err in
+                           if let err = err {
+                               lastError = err
+                           } else {
+                               migratedCount += 1
+                           }
+                           group.leave()
+                       }
+                   }
+
+                   group.notify(queue: .main) {
+                       if let lastError = lastError {
+                           completion(.failure(lastError))
+                       } else {
+                           completion(.success(migratedCount))
+                       }
+                   }
+               } catch {
+                   completion(.failure(error))
+               }
     }
 
     // Upload a single Funcionario change to Firestore
@@ -120,7 +173,42 @@ struct FirestoreMigrator {
             completion(.failure(error))
         }
     }
+    // MARK: - Async helpers
+        static func deleteAllDocuments(in collectionName: String) async throws {
+            let db = Firestore.firestore()
+            let snapshot = try await db.collection(collectionName).getDocuments()
+            let batch = db.batch()
 
+            for document in snapshot.documents {
+                batch.deleteDocument(document.reference)
+            }
+
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                batch.commit { error in
+                    if let error = error {
+                        continuation.resume(throwing: error)
+                    } else {
+                        continuation.resume(returning: ())
+                    }
+                }
+            }
+        }
+
+        static func migrateFuncionariosToFirestoreAsync(from context: NSManagedObjectContext) async throws -> Int {
+            try await withCheckedThrowingContinuation { continuation in
+                migrateFuncionariosToFirestore(from: context) { result in
+                    continuation.resume(with: result)
+                }
+            }
+        }
+
+        static func migrateMunicipiosToFirestoreAsync(from context: NSManagedObjectContext) async throws -> Int {
+            try await withCheckedThrowingContinuation { continuation in
+                migrateMunicipiosToFirestore(from: context) { result in
+                    continuation.resume(with: result)
+                }
+            }
+        }
     // Upload a single Municipio change to Firestore
     static func uploadMunicipio(
         objectID: NSManagedObjectID,
@@ -136,20 +224,17 @@ struct FirestoreMigrator {
             let db = Firestore.firestore()
 
             var data: [String: Any] = [
-                "nome": municipio.value(forKey: "nome") as? String ?? "",
-                "regional": municipio.value(forKey: "regional") as? String ?? "",
-                "favorito": municipio.value(forKey: "favorito") as? Bool ?? false
+                "nome": municipio.nome ?? "",
+                "regional": municipio.regional ?? "",
+                "favorito": municipio.favorito
             ]
 
-            if let updatedAt = municipio.value(forKey: "updatedAt") {
-                data["updatedAt"] = updatedAt
-            }
-
             let docId: String
-            if let id = municipio.value(forKey: "id") as? UUID {
-                docId = id.uuidString
+            if let uuid = municipio.id as? UUID {
+                docId = uuid.uuidString
             } else {
-                docId = objectID.uriRepresentation().absoluteString
+                let uriString = objectID.uriRepresentation().absoluteString
+                docId = firestoreSafeID(from: uriString)
             }
 
             db.collection("municipios").document(docId).setData(data) { err in
@@ -255,5 +340,3 @@ struct FirestoreMigrator {
         }
     }
 }
-
-
