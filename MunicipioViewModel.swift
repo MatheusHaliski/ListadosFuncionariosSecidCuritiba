@@ -5,10 +5,12 @@
 //  Created by Matheus Braschi Haliski on 19/09/25.
 //
 
+internal import CoreData
+import Combine
 
-import CoreData
-
+@MainActor 
 class MunicipioViewModel: ObservableObject {
+    
     @Published var municipios: [Municipio] = []
     private var viewContext: NSManagedObjectContext
     
