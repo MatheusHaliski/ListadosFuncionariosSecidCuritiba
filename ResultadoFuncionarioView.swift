@@ -1,5 +1,5 @@
 import SwiftUI
-import CoreData
+internal import CoreData
 import UIKit
 
 struct ResultadoFuncionarioView: View {
