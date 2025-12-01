@@ -11,6 +11,7 @@ import CloudKit
 import CoreLocation
 import AVFoundation
 import Network
+internal import CoreData
 
 
 struct ProjetoDetalheView: View {
