@@ -3,6 +3,7 @@ internal import CoreData
 #if os(iOS)
 import UIKit
 import PhotosUI
+import Combine
 #endif
 
 struct BuscarFuncionarioView: View {
@@ -32,13 +33,14 @@ struct BuscarFuncionarioView: View {
                     HStack(spacing: 0) {
                         NavigationLink(destination: FuncionarioDetailView(funcionario: funcionario)) {
                             FuncionarioRowViewV2(funcionario: funcionario, showsFavorite: false)
+                                .contentShape(Rectangle())
                         }
                         Button {
                             funcionarioParaEditar = funcionario
                         } label: {
                             Image(systemName: "pencil")
                                 .foregroundStyle(.blue)
-                                .frame(width: 36, height: 44)
+                                .frame(width: 44, height: 56)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Editar funcionário")
@@ -78,21 +80,36 @@ struct BuscarFuncionarioView: View {
     @ViewBuilder
     private func favoriteButton(for funcionario: Funcionario) -> some View {
         Button {
-            // Toggle immediately for instant UI feedback
-            funcionario.favorito.toggle()
-            // Persist change without blocking UI
-            do {
-                try context.save()
-            } catch {
-                // If save fails, revert and log
-                funcionario.favorito.toggle()
-                print("[BuscarFuncionario] Failed to save favorite change: \(error.localizedDescription)")
+            #if os(iOS)
+            let generator = UIImpactFeedbackGenerator(style: .light)
+            generator.impactOccurred()
+            #endif
+            Task { @MainActor in
+                do {
+                    // Get a fresh instance from context to avoid stale/fault issues
+                    guard let fresh = try? context.existingObject(with: funcionario.objectID) as? Funcionario else {
+                        print("[BuscarFuncionario] Failed to refetch Funcionario for favorite toggle")
+                        return
+                    }
+                    guard !fresh.isDeleted else { return }
+                    fresh.objectWillChange.send()
+                    withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                        fresh.favorito.toggle()
+                    }
+                    try context.save()
+                } catch {
+                    print("[BuscarFuncionario] Save error on favorite toggle: \(error.localizedDescription)")
+                }
             }
         } label: {
             Image(systemName: funcionario.favorito ? "star.fill" : "star")
-                .foregroundStyle(funcionario.favorito ? .yellow : .secondary)
-                .frame(width: 36, height: 44)
-                .contentShape(Rectangle())
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(funcionario.favorito ? Color.yellow : Color.gray)
+                .frame(width: 56, height: 56)
+                .background(Circle().fill(Color(.systemBackground)))
+                .overlay(Circle().stroke(Color.black.opacity(0.4), lineWidth: 1))
+                .shadow(radius: 2)
+                .contentShape(Circle())
                 .accessibilityLabel(funcionario.favorito ? "Remover dos favoritos" : "Marcar como favorito")
         }
         .buttonStyle(.plain)
@@ -230,4 +247,3 @@ struct EditFuncionarioPlaceholderView: View {
     BuscarFuncionarioView()
         .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
 }
-
