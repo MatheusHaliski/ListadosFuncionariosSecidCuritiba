@@ -1,5 +1,5 @@
 import Foundation
-import CoreData
+internal import CoreData
 import FirebaseFirestore
 import FirebaseStorage
 
@@ -255,4 +255,5 @@ struct FirestoreMigrator {
         }
     }
 }
+
 
