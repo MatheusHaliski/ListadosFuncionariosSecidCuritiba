@@ -1,5 +1,5 @@
 import SwiftUI
-import CoreData
+internal import CoreData
 #if os(iOS)
 import UIKit
 import PhotosUI
