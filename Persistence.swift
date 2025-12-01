@@ -5,7 +5,7 @@
 //  Created by Matheus Braschi Haliski on 01/08/25.
 //
 
-import CoreData
+internal import CoreData
 import SwiftUI
 
 struct PersistenceController {
