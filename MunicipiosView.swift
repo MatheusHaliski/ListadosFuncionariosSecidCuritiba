@@ -1,5 +1,6 @@
 import SwiftUI
-import CoreData
+internal import CoreData
+import Combine
 
 struct MunicipiosView: View {
     @StateObject private var viewModel: MunicipioViewModel
