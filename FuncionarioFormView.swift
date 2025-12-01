@@ -1,3 +1,4 @@
+/// FuncionarioFormView: View for adding or editing a Funcionario (employee) in Core Data. Handles user input, validation, and saving logic.
 import SwiftUI
 internal import CoreData
 #if os(iOS)
@@ -5,12 +6,14 @@ import UIKit
 import PhotosUI
 #endif
 
+/// Displays a form for creating or editing a Funcionario. Used in the Add flow from HomeView.
 struct FuncionarioFormView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.dismiss) private var dismiss
 
     let isEditando: Bool
 
+    // MARK: - Form State Properties
     // The Core Data object being edited
     @ObservedObject var funcionario: Funcionario
 
@@ -26,6 +29,7 @@ struct FuncionarioFormView: View {
     @State private var fotoItem: PhotosPickerItem?
 #endif
 
+    // MARK: - Initializer, seeds state for creation or editing context
     init(regional: String, funcionario: Funcionario, isEditando: Bool) {
         self._funcionario = ObservedObject(initialValue: funcionario)
         self.isEditando = isEditando
@@ -39,9 +43,11 @@ struct FuncionarioFormView: View {
         _fotoData = State(initialValue: funcionario.imagem)
     }
 
+    // MARK: - View Body
     var body: some View {
         Form {
 #if os(iOS)
+            // Photo selection and preview (iOS only)
             Section {
                 VStack(spacing: 12) {
                     if let fotoData, let uiImage = UIImage(data: fotoData) {
@@ -80,6 +86,7 @@ struct FuncionarioFormView: View {
             }
 #endif
 
+            // Main Info Section
             Section(header: Text("Informações")) {
                 TextField("Nome", text: $nomeText)
                     .textInputAutocapitalization(.words)
@@ -89,6 +96,7 @@ struct FuncionarioFormView: View {
                     .textInputAutocapitalization(.words)
             }
 
+            // Contact Info Section
             Section(header: Text("Contato")) {
                 TextField("Telefone", text: $telefoneText)
                     .keyboardType(.phonePad)
@@ -99,41 +107,51 @@ struct FuncionarioFormView: View {
             }
 
             Section {
-                Toggle("Favorito", isOn: $favorito)
+                    Toggle("Favorito", isOn: $favorito)
+                    }
             }
-        }
-        .navigationTitle(isEditando ? "Editar Servidor" : "Novo Servidor")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancelar") { dismiss() }
-            }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Salvar") { saveAndDismiss() }
-                    .disabled(nomeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-    }
+                    .navigationTitle(isEditando ? "Editar Servidor" : "Novo Servidor")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancelar") { dismiss() }
+                            }
+                            ToolbarItem(placement: .confirmationAction) {
+                            Button("Salvar") { saveAndDismiss() }
+                            .disabled(nomeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                }
+                        }
+                    }
 
     private func saveAndDismiss() {
         // Apply edited fields back to the Core Data object
-        funcionario.nome = nomeText.trimmingCharacters(in: .whitespacesAndNewlines)
-        funcionario.funcao = cargoText.trimmingCharacters(in: .whitespacesAndNewlines)
-        funcionario.regional = regionalText.trimmingCharacters(in: .whitespacesAndNewlines)
-        funcionario.celular = telefoneText.trimmingCharacters(in: .whitespacesAndNewlines)
-        funcionario.email = emailText.trimmingCharacters(in: .whitespacesAndNewlines)
-        funcionario.favorito = favorito
-        funcionario.imagem = fotoData
+            if funcionario.id == nil {
+                    funcionario.id = UUID()
+                }
+            funcionario.nome = nomeText.trimmingCharacters(in: .whitespacesAndNewlines)
+            funcionario.funcao = cargoText.trimmingCharacters(in: .whitespacesAndNewlines)
+            funcionario.regional = regionalText.trimmingCharacters(in: .whitespacesAndNewlines)
+            funcionario.celular = telefoneText.trimmingCharacters(in: .whitespacesAndNewlines)
+            funcionario.email = emailText.trimmingCharacters(in: .whitespacesAndNewlines)
+            funcionario.favorito = favorito
+            funcionario.imagem = fotoData
 
-        do {
-            try viewContext.save()
-            // Notify listeners similarly to FavoritesView usage
-            NotificationCenter.default.post(name: .funcionarioAtualizado, object: nil)
-            dismiss()
-        } catch {
-            // In a real app, present an alert; for now we log
-            print("Erro ao salvar funcionario: \(error.localizedDescription)")
-        }
-    }
-}
-
+            do {
+                    try viewContext.save()
+// Notify listeners similarly to FavoritesView usage
+                    NotificationCenter.default.post(name: .funcionarioAtualizado, object: nil)
+                    FirestoreMigrator.uploadFuncionario(objectID: funcionario.objectID, context: viewContext) { result in
+            switch result {
+                case .success:
+                    print("[FuncionarioForm] Upload OK: \(funcionario.objectID)")
+                case .failure(let error):
+                    print("[FuncionarioForm] Upload ERRO: \(error.localizedDescription)")
+                }
+                        }
+                    dismiss()
+            } catch {
+// In a real app, present an alert; for now we log
+                    print("Erro ao salvar funcionario: \(error.localizedDescription)")
+                }
+                    }
+                            }
