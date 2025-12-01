@@ -1,11 +1,21 @@
 import SwiftUI
+internal import CoreData
 
 struct FuncionarioDetailView: View {
     let funcionario: Funcionario
-    let onEdit: (() -> Void)? = nil
-    
+    let onEdit: (() -> Void)?
+
+    @Environment(\.managedObjectContext) private var viewContext
+
     @State private var mostrandoEdicao = false
-    
+    @State private var isFavorite: Bool
+
+    init(funcionario: Funcionario, onEdit: (() -> Void)? = nil) {
+        self.funcionario = funcionario
+        self.onEdit = onEdit
+        _isFavorite = State(initialValue: funcionario.favorito)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -44,6 +54,12 @@ struct FuncionarioDetailView: View {
                         .textSelection(.enabled)
                 }
             }
+            Toggle(isOn: Binding(get: { isFavorite }, set: toggleFavorite(_:))) {
+                Label("Favorito", systemImage: "star.fill")
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.yellow, .secondary)
+            }
+            .toggleStyle(SwitchToggleStyle(tint: .yellow))
             Spacer()
         }
         .padding()
@@ -66,6 +82,29 @@ struct FuncionarioDetailView: View {
                     isEditando: true
                 )
             }
+        }
+        .onChange(of: funcionario.favorito) { newValue in
+            isFavorite = newValue
+        }
+    }
+
+    private func toggleFavorite(_ newValue: Bool) {
+        isFavorite = newValue
+        funcionario.favorito = newValue
+
+        do {
+            try viewContext.save()
+            NotificationCenter.default.post(name: .funcionarioAtualizado, object: nil)
+            FirestoreMigrator.uploadFuncionario(objectID: funcionario.objectID, context: viewContext) { result in
+                switch result {
+                case .success:
+                    print("[FuncionarioDetail] Favorito atualizado no Firestore")
+                case .failure(let error):
+                    print("[FuncionarioDetail] Erro ao atualizar favorito: \(error.localizedDescription)")
+                }
+            }
+        } catch {
+            print("[FuncionarioDetail] Erro ao salvar favorito: \(error.localizedDescription)")
         }
     }
 }
