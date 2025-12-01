@@ -59,13 +59,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         #else
         print("[Firebase] FirebaseCore not available; skipping FirebaseApp.configure().")
         #endif
-
+        AppDataResetter.resetForXcodeBuildIfNeeded(context: context)
         return true
     }
 }
 
 
-fileprivate func isRunningFromXcode() -> Bool {
+func isRunningFromXcode() -> Bool {
     return isatty(STDOUT_FILENO) != 0 || getenv("XCODE_RUNNING_FOR_PREVIEWS") != nil
 }
 
