@@ -6,7 +6,7 @@
 //
 
 import SwiftUI
-import CoreData
+internal import CoreData
 
 struct ProjetosModalView: View {
     @ObservedObject var funcionario: Funcionario
