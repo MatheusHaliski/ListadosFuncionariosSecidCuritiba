@@ -1,5 +1,5 @@
 import SwiftUI
-import CoreData
+internal import CoreData
 
 public struct MunicipioRowViewV2: View {
     let municipio: Municipio
