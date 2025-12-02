@@ -1,8 +1,8 @@
 import SwiftUI
+import _PhotosUI_SwiftUI
 internal import CoreData
 #if os(iOS)
 import UIKit
-import PhotosUI
 #endif
 
 struct BuscarFuncionarioView: View {
@@ -12,142 +12,225 @@ struct BuscarFuncionarioView: View {
         animation: .default
     ) private var funcionarios: FetchedResults<Funcionario>
     
+    // MARK: - Estados
     @State private var searchText = ""
+    @State private var zoom: CGFloat = 1.0
+    @State private var regionalSelecionada: String = ""
+    @State private var mostrandoGrafico = false
     @State private var funcionarioParaEditar: Funcionario?
     @State private var didSyncFromFirestore = false
     
+    // MARK: - Lista filtrada
     var filteredFuncionarios: [Funcionario] {
-        guard !searchText.isEmpty else { return Array(funcionarios) }
-        return funcionarios.filter { funcionario in
-            (funcionario.nome?.localizedCaseInsensitiveContains(searchText) ?? false) ||
-            (funcionario.funcao?.localizedCaseInsensitiveContains(searchText) ?? false) ||
-            (funcionario.regional?.localizedCaseInsensitiveContains(searchText) ?? false)
+        funcionarios.filter { f in
+            let matchesSearch =
+                searchText.isEmpty ||
+                f.nome?.localizedCaseInsensitiveContains(searchText) == true ||
+                f.funcao?.localizedCaseInsensitiveContains(searchText) == true ||
+                f.regional?.localizedCaseInsensitiveContains(searchText) == true
+            
+            let matchesRegion =
+                regionalSelecionada.isEmpty ||
+                f.regional == regionalSelecionada
+            
+            return matchesSearch && matchesRegion
         }
+    }
+    
+    // MARK: - Regionais dinâmicas
+    var todasRegionais: [String] {
+        let set = Set(funcionarios.compactMap { f in
+            let r = f.regional?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return (r?.isEmpty == false ? r : nil)
+        })
+        return Array(set).sorted()
     }
     
     var body: some View {
         NavigationStack {
-            List {
-                ForEach(filteredFuncionarios, id: \.objectID) { funcionario in
-                    HStack(spacing: 0) {
-                        NavigationLink(destination: FuncionarioDetailView(funcionario: funcionario)) {
-                            FuncionarioRowViewV2(funcionario: funcionario, showsFavorite: false)
-                                .contentShape(Rectangle())
+            VStack(spacing: 0) {
+                
+                // MARK: - HEADER (Formulário)
+                VStack(spacing: 14) {
+                    
+                    // Campo de busca
+                    TextField("Buscar por nome, função ou regional", text: $searchText)
+                        .textFieldStyle(.roundedBorder)
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                    
+                    // Picker de regionais
+                    Picker("Regional", selection: $regionalSelecionada) {
+                        Text("Todas").tag("")
+                        ForEach(todasRegionais, id: \.self) { reg in
+                            Text(reg).tag(reg)
                         }
-                        Button {
-                            funcionarioParaEditar = funcionario
-                        } label: {
-                            Image(systemName: "pencil")
-                                .foregroundStyle(.blue)
-                                .frame(width: 44, height: 56)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Editar funcionário")
-                        .padding(.trailing, 4)
                     }
+                    .pickerStyle(.automatic)
+                    .padding(.horizontal)
+                    
+                    // Zoom Slider
+                    VStack(alignment: .leading) {
+                        Text("Zoom da Lista")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Slider(value: $zoom, in: 0.8...1.6, step: 0.05)
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 4)
                 }
-                if filteredFuncionarios.isEmpty {
-                    Text("Nenhum funcionário encontrado")
-                        .foregroundStyle(.secondary)
-                        .padding()
+                .padding(.bottom, 10)
+                .background(Color(.systemGroupedBackground))
+                
+                // MARK: - LISTA COM ZOOM
+                List {
+                    ForEach(filteredFuncionarios, id: \.objectID) { funcionario in
+                        HStack(spacing: 0) {
+                            
+                            NavigationLink(destination: FuncionarioDetailView(funcionario: funcionario)) {
+                                FuncionarioRowViewV2(funcionario: funcionario, showsFavorite: false)
+                                    .scaleEffect(zoom)
+                                    .padding(.vertical, 4)
+                            }
+                            
+                            Button {
+                                funcionarioParaEditar = funcionario
+                            } label: {
+                                Image(systemName: "pencil")
+                                    .foregroundStyle(.blue)
+                                    .frame(width: 44, height: 56)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    
+                    if filteredFuncionarios.isEmpty {
+                        Text("Nenhum funcionário encontrado")
+                            .foregroundStyle(.secondary)
+                            .padding()
+                    }
                 }
             }
             .navigationTitle("Buscar Funcionário")
-            .searchable(text: $searchText, prompt: "Buscar por nome, função ou regional")
-            .sheet(item: $funcionarioParaEditar) { funcionario in
-                // Substitua `EditFuncionarioView` pelo seu editor real, se existir
-                EditFuncionarioPlaceholderView(funcionario: funcionario)
-                    .presentationDetents([.medium, .large])
-            }
-        }
-        .task(id: "firestoreSyncOnce") {
-            guard !didSyncFromFirestore else { return }
-            didSyncFromFirestore = true
-            FirestoreMigrator.syncFromFirestoreToCoreData(context: context) { result in
-                switch result {
-                case .success(let count):
-                    print("[BuscarFuncionario] Synced \(count) funcionários from Firestore → Core Data")
-                case .failure(let error):
-                    print("[BuscarFuncionario] Sync error: \(error.localizedDescription)")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        mostrandoGrafico = true
+                    } label: {
+                        Image(systemName: "chart.bar.fill")
+                    }
+                    .accessibilityLabel("Mostrar gráfico de regionais")
                 }
+            }
+            .sheet(item: $funcionarioParaEditar) { funcionario in
+                EditFuncionarioPlaceholderView(funcionario: funcionario)
+            }
+            .sheet(isPresented: $mostrandoGrafico) {
+                GraficoFuncionariosPorRegionalView(
+                    data: AnalyticsAggregator.aggregateFuncionariosByRegional(Array(funcionarios))
+                )
+            }
+            .task(id: "firestoreSyncOnce") {
+                guard !didSyncFromFirestore else { return }
+                didSyncFromFirestore = true
+                FirestoreMigrator.syncFromFirestoreToCoreData(context: context) { _ in }
             }
         }
     }
-    
 }
+
+
 
 struct EditFuncionarioPlaceholderView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.managedObjectContext) private var context
     @ObservedObject var funcionario: Funcionario
 
+    // MARK: - States for all attributes
     @State private var nome: String = ""
     @State private var funcao: String = ""
     @State private var regional: String = ""
     @State private var favorito: Bool = false
+    @State private var celular: String = ""
+    @State private var email: String = ""
+    @State private var ramal: String = ""
+    @State private var imagemURL: String = ""
     @State private var imagemData: Data? = nil
+    
     #if os(iOS)
     @State private var fotoItem: PhotosPickerItem?
     #endif
+
     @State private var showingValidationAlert = false
 
     var body: some View {
         NavigationStack {
-            Form {
-                #if os(iOS)
-                Section("Imagem") {
-                    VStack(spacing: 12) {
-                        if let imagemData, let uiImage = UIImage(data: imagemData) {
-                            Image(uiImage: uiImage)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 120, height: 120)
-                                .clipShape(Circle())
-                                .overlay(Circle().stroke(Color.primary.opacity(0.2), lineWidth: 1))
-                        } else {
-                            Image(systemName: "person.crop.circle.fill")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 120, height: 120)
+            ScrollView {
+                VStack(spacing: 28) {
+
+                    // MARK: - Header Photo + Name
+                    VStack(spacing: 14) {
+                        
+                        photoSection
+                        
+                        TextField("Nome completo", text: $nome)
+                            .font(.title3.weight(.semibold))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                            .padding(.vertical, 8)
+                            .background(Color(.systemGray6))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .padding(.horizontal, 32)
+                    }
+
+                    Divider().padding(.horizontal, 32)
+
+                    // MARK: - Main Information
+                    Group {
+                        sectionLabel("Função / Cargo")
+                        VStack(alignment: .leading, spacing: 6) {
+                            TextField("Ex.: Engenheiro, Gestor Municipal", text: $funcao)
+                                .font(.body)
+                                .padding()
+                                .background(Color(.systemGray6))
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                            
+                            Text("Descreva brevemente a função exercida no órgão.")
+                                .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
+                        .padding(.horizontal, 32)
 
-                        #if canImport(PhotosUI)
-                        PhotosPicker(selection: $fotoItem, matching: .images) {
-                            Label("Selecionar foto", systemImage: "photo.on.rectangle")
-                        }
-                        .onChange(of: fotoItem) { newItem in
-                            guard let newItem else { return }
-                            Task {
-                                if let data = try? await newItem.loadTransferable(type: Data.self) {
-                                    await MainActor.run {
-                                        imagemData = data
-                                    }
-                                }
-                            }
-                        }
-                        #endif
+                        sectionLabel("Regional")
+                        TextField("Ex.: Curitiba, Oeste, Noroeste", text: $regional)
+                            .font(.body)
+                            .padding()
+                            .background(Color(.systemGray6))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .padding(.horizontal, 32)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 4)
-                }
-                #endif
 
-                Section("Informações") {
-                    TextField("Nome", text: $nome)
-                        .textInputAutocapitalization(.words)
-                        .autocorrectionDisabled(false)
-                    TextField("Função", text: $funcao)
-                        .textInputAutocapitalization(.words)
-                        .autocorrectionDisabled(false)
-                    TextField("Regional", text: $regional)
-                        .textInputAutocapitalization(.words)
-                        .autocorrectionDisabled(false)
-                }
-                Section("Favorito") {
+                    Divider().padding(.horizontal, 32)
+
+                    // MARK: - Contact
+                    Group {
+                        sectionLabel("Contato")
+                        infoField(title: "Celular", text: $celular, keyboard: .phonePad)
+                        infoField(title: "Ramal", text: $ramal, keyboard: .numberPad)
+                        infoField(title: "E-mail", text: $email, keyboard: .emailAddress)
+                    }
+
+                    // MARK: - Favorite Toggle
                     Toggle("Marcar como favorito", isOn: $favorito)
+                        .font(.headline)
+                        .padding(.horizontal, 32)
+                        .toggleStyle(SwitchToggleStyle(tint: .blue))
+
+                    Spacer().frame(height: 20)
                 }
+                .padding(.top, 24)
             }
+
             .navigationTitle("Editar Funcionário")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -155,51 +238,115 @@ struct EditFuncionarioPlaceholderView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Salvar") { saveChanges() }
-                        .disabled(nome.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .disabled(nome.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
-            .onAppear {
-                // Initialize state from the current Core Data object
-                nome = funcionario.nome ?? ""
-                funcao = funcionario.funcao ?? ""
-                regional = funcionario.regional ?? ""
-                favorito = funcionario.favorito
-                imagemData = funcionario.imagem
-            }
+            .onAppear { loadValues() }
             .alert("Preencha o nome", isPresented: $showingValidationAlert) {
-                Button("OK", role: .cancel) { }
+                Button("OK") { }
             }
         }
     }
 
+    // MARK: - Photo Section
+    private var photoSection: some View {
+        VStack(spacing: 12) {
+            #if os(iOS)
+            if let data = imagemData, let uiImage = UIImage(data: data) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 130, height: 130)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.blue.opacity(0.4), lineWidth: 3))
+                    .shadow(radius: 6)
+            } else {
+                Image(systemName: "person.crop.circle.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 130, height: 130)
+                    .foregroundStyle(.gray.opacity(0.6))
+            }
+
+            PhotosPicker(selection: $fotoItem, matching: .images) {
+                Text("Alterar foto")
+                    .font(.headline)
+                    .foregroundStyle(.blue)
+            }
+            .onChange(of: fotoItem) { newItem in
+                guard let newItem else { return }
+                Task {
+                    if let data = try? await newItem.loadTransferable(type: Data.self) {
+                        await MainActor.run { imagemData = data }
+                    }
+                }
+            }
+            #endif
+        }
+    }
+
+    // MARK: - Section Label
+    private func sectionLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.headline)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 32)
+    }
+
+    // MARK: - Info Field Builder
+    private func infoField(title: String, text: Binding<String>, keyboard: UIKeyboardType) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+
+            TextField(title, text: text)
+                .keyboardType(keyboard)
+                .font(.body)
+                .padding()
+                .background(Color(.systemGray6))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .padding(.horizontal, 32)
+    }
+
+    // MARK: - Load Initial Values
+    private func loadValues() {
+        nome = funcionario.nome ?? ""
+        funcao = funcionario.funcao ?? ""
+        regional = funcionario.regional ?? ""
+        favorito = funcionario.favorito
+        celular = funcionario.celular ?? ""
+        email = funcionario.email ?? ""
+        ramal = funcionario.ramal ?? ""
+        imagemURL = funcionario.imagemURL ?? ""
+        imagemData = funcionario.imagem
+    }
+
+    // MARK: - Save Changes
     private func saveChanges() {
-        let trimmedName = nome.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty else {
+        guard !nome.trimmingCharacters(in: .whitespaces).isEmpty else {
             showingValidationAlert = true
             return
         }
 
-        funcionario.nome = trimmedName
-        funcionario.funcao = funcao.trimmingCharacters(in: .whitespacesAndNewlines)
-        funcionario.regional = regional.trimmingCharacters(in: .whitespacesAndNewlines)
+        funcionario.nome = nome
+        funcionario.funcao = funcao
+        funcionario.regional = regional
         funcionario.favorito = favorito
+        funcionario.celular = celular
+        funcionario.email = email
+        funcionario.ramal = ramal
+        funcionario.imagemURL = imagemURL
         funcionario.imagem = imagemData
 
         do {
             try context.save()
-            NotificationCenter.default.post(name: .funcionarioAtualizado, object: nil)
-            FirestoreMigrator.uploadFuncionario(objectID: funcionario.objectID, context: context) { result in
-                switch result {
-                case .success:
-                    print("[EditarFuncionario] Funcionário atualizado no Firestore")
-                case .failure(let error):
-                    print("[EditarFuncionario] Erro ao atualizar: \(error.localizedDescription)")
-                }
-            }
-            dismiss()
         } catch {
-            print("Erro ao salvar alterações: \(error.localizedDescription)")
+            print("Erro ao salvar: \(error.localizedDescription)")
         }
+
+        dismiss()
     }
 }
 
