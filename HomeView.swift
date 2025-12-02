@@ -37,7 +37,7 @@ extension View {
 
 // MARK: - Zoom Controls Modifier (top placement)
 private struct ZoomControlsModifier: ViewModifier {
-    @AppStorage("app_zoom_scale") private var persistedZoom: Double = 1.35
+    @AppStorage("app_zoom_scale") private var persistedZoom: Double = 1.05
 
     func body(content: Content) -> some View {
         content
@@ -173,7 +173,7 @@ struct HomeView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .appZoomScale(CGFloat(persistedZoom))
                 .scaleEffect(persistedZoom)
-                .animation(.easeInOut, value: persistedZoom) 
+                .animation(.easeInOut, value: persistedZoom)
             }
             .toolbar {
                 // 🔹 Botão "Sobre a SECID"
@@ -193,7 +193,6 @@ struct HomeView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
                         Picker("Theme", selection: $themePreference) {
-                            Text("System").tag("system")
                             Text("Light").tag("light")
                             Text("Dark").tag("dark")
                         }
@@ -230,7 +229,7 @@ struct HomeView: View {
                 }
                 #endif
 
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .principal) {
                     ZoomMenuButton(persistedZoom: $persistedZoom)
                 }
             }
@@ -293,4 +292,3 @@ struct HomeRow: View {
         .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 4)
     }
 }
-

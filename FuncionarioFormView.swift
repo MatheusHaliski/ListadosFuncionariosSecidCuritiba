@@ -107,51 +107,54 @@ struct FuncionarioFormView: View {
             }
 
             Section {
-                    Toggle("Favorito", isOn: $favorito)
-                    }
+                Toggle(isOn: $favorito) {
+                    Text("Favorito")
+                        .foregroundStyle(.blue)
+                }
             }
-                    .navigationTitle(isEditando ? "Editar Servidor" : "Novo Servidor")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                            Button("Cancelar") { dismiss() }
-                            }
-                            ToolbarItem(placement: .confirmationAction) {
-                            Button("Salvar") { saveAndDismiss() }
-                            .disabled(nomeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                                }
-                        }
-                    }
+        }
+        .navigationTitle(isEditando ? "Editar Servidor" : "Novo Servidor")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancelar") { dismiss() }
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Salvar") { saveAndDismiss() }
+                    .disabled(nomeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+    }
 
     private func saveAndDismiss() {
         // Apply edited fields back to the Core Data object
-            if funcionario.id == nil {
-                    funcionario.id = UUID()
-                }
-            funcionario.nome = nomeText.trimmingCharacters(in: .whitespacesAndNewlines)
-            funcionario.funcao = cargoText.trimmingCharacters(in: .whitespacesAndNewlines)
-            funcionario.regional = regionalText.trimmingCharacters(in: .whitespacesAndNewlines)
-            funcionario.celular = telefoneText.trimmingCharacters(in: .whitespacesAndNewlines)
-            funcionario.email = emailText.trimmingCharacters(in: .whitespacesAndNewlines)
-            funcionario.favorito = favorito
-            funcionario.imagem = fotoData
+        if funcionario.id == nil {
+            funcionario.id = UUID()
+        }
+        funcionario.nome = nomeText.trimmingCharacters(in: .whitespacesAndNewlines)
+        funcionario.funcao = cargoText.trimmingCharacters(in: .whitespacesAndNewlines)
+        funcionario.regional = regionalText.trimmingCharacters(in: .whitespacesAndNewlines)
+        funcionario.celular = telefoneText.trimmingCharacters(in: .whitespacesAndNewlines)
+        funcionario.email = emailText.trimmingCharacters(in: .whitespacesAndNewlines)
+        funcionario.favorito = favorito
+        funcionario.imagem = fotoData
 
-            do {
-                    try viewContext.save()
-// Notify listeners similarly to FavoritesView usage
-                    NotificationCenter.default.post(name: .funcionarioAtualizado, object: nil)
-                    FirestoreMigrator.uploadFuncionario(objectID: funcionario.objectID, context: viewContext) { result in
-            switch result {
+        do {
+            try viewContext.save()
+            // Notify listeners similarly to FavoritesView usage
+            NotificationCenter.default.post(name: .funcionarioAtualizado, object: nil)
+            FirestoreMigrator.uploadFuncionario(objectID: funcionario.objectID, context: viewContext) { result in
+                switch result {
                 case .success:
                     print("[FuncionarioForm] Upload OK: \(funcionario.objectID)")
                 case .failure(let error):
                     print("[FuncionarioForm] Upload ERRO: \(error.localizedDescription)")
                 }
-                        }
-                    dismiss()
-            } catch {
-// In a real app, present an alert; for now we log
-                    print("Erro ao salvar funcionario: \(error.localizedDescription)")
-                }
-                    }
-                            }
+            }
+            dismiss()
+        } catch {
+            // In a real app, present an alert; for now we log
+            print("Erro ao salvar funcionario: \(error.localizedDescription)")
+        }
+    }
+}

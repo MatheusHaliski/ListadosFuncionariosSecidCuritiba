@@ -2,10 +2,12 @@ import SwiftUI
 internal import CoreData
 
 struct FuncionarioRowViewV2: View {
-    let funcionario: Funcionario
+    @ObservedObject var funcionario: Funcionario
     let showsFavorite: Bool
+    #if canImport(UIKit)
     @State private var image: UIImage? = nil
     @State private var isLoadingImage = false
+    #endif
 
     init(funcionario: Funcionario, showsFavorite: Bool = true) {
         self.funcionario = funcionario
@@ -15,6 +17,7 @@ struct FuncionarioRowViewV2: View {
     var body: some View {
         HStack(spacing: 16) {
             Group {
+                #if canImport(UIKit)
                 if let uiImage = image {
                     Image(uiImage: uiImage)
                         .resizable()
@@ -32,6 +35,28 @@ struct FuncionarioRowViewV2: View {
                         .frame(width: 56, height: 56)
                         .foregroundStyle(.secondary)
                 }
+                #elseif canImport(AppKit)
+                if let imageData = funcionario.imagem as Data?, let nsImage = NSImage(data: imageData) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 56, height: 56)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(Color.accentColor, lineWidth: 2))
+                } else {
+                    Image(systemName: "person.crop.circle.fill")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 56, height: 56)
+                        .foregroundStyle(.secondary)
+                }
+                #else
+                Image(systemName: "person.crop.circle.fill")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 56, height: 56)
+                    .foregroundStyle(.secondary)
+                #endif
             }
             .animation(.easeInOut, value: image)
 
@@ -50,7 +75,7 @@ struct FuncionarioRowViewV2: View {
             Spacer()
             if showsFavorite, funcionario.favorito {
                 Image(systemName: "star.fill")
-                    .foregroundColor(.yellow)
+                    .foregroundColor(.green)
                     .accessibilityLabel("Favorito")
             }
         }
@@ -59,11 +84,11 @@ struct FuncionarioRowViewV2: View {
     }
 
     private func loadImage() {
-        // Images must come from Core Data only. If the record doesn't have binary data yet,
-        // we intentionally keep showing the placeholder instead of re-downloading from Firebase.
-        if let imageData = funcionario.imagem as? Data, let uiImage = UIImage(data: imageData) {
+        #if canImport(UIKit)
+        if let imageData = funcionario.imagem as Data?, let uiImage = UIImage(data: imageData) {
             self.image = uiImage
         }
+        #endif
     }
 }
 
@@ -76,4 +101,3 @@ struct FuncionarioRowViewV2: View {
     funcionario.favorito = true
     return FuncionarioRowViewV2(funcionario: funcionario)
 }
-

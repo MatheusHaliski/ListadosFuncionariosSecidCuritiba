@@ -1,52 +1,43 @@
 import SwiftUI
 internal import CoreData
+import Combine
 
 struct FavoritesView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.openURL) private var openURL
+
     private let contactService: ContactService = DefaultContactService.shared
-    
+
     @FetchRequest(
         entity: Funcionario.entity(),
         sortDescriptors: [NSSortDescriptor(keyPath: \Funcionario.nome, ascending: true)],
         predicate: NSPredicate(format: "favorito == YES")
     ) private var favoritos: FetchedResults<Funcionario>
-    
+
     @FetchRequest(
         entity: Municipio.entity(),
         sortDescriptors: [NSSortDescriptor(keyPath: \Municipio.nome, ascending: true)],
         predicate: NSPredicate(format: "favorito == YES")
     ) private var municipiosFavoritos: FetchedResults<Municipio>
-    
+
     @State private var selectedSegment: Segment = .employees
     @State private var funcionarioSelecionado: Funcionario? = nil
     @AppStorage("app_zoom_scale") private var persistedZoom: Double = 1.35
     @State private var didSyncFromFirestore = false
-    
-    private enum Segment: String, CaseIterable, Identifiable {
-        case employees = "Funcionarios"
-        case municipios = "Municipios"
+
+    enum Segment: String, CaseIterable, Identifiable {
+        case employees = "Funcionários"
+        case municipios = "Municípios"
         var id: String { rawValue }
     }
-    
+
     var body: some View {
-        VStack(spacing: 0) {
-            
-            // MARK: Picker fixo no topo
-            Picker("Segment", selection: $selectedSegment) {
-                Text(Segment.employees.rawValue).tag(Segment.employees)
-                Text(Segment.municipios.rawValue).tag(Segment.municipios)
-            }
-            .pickerStyle(.segmented)
-            .padding([.horizontal, .top])
-            .background(Color(.systemGroupedBackground))
-            .zIndex(2)
-            
-            // MARK: Conteúdo Scroll + Zoom
-            ScrollView(.vertical, showsIndicators: true) {
-                VStack(spacing: selectedSegment == .municipios ? 14 : 10) {
-                    
-                    // MARK: Funcionários Favoritos
+
+        ScrollView([.horizontal, .vertical], showsIndicators: true) {
+            // A flexible container that can grow beyond the screen width to allow horizontal scroll
+            VStack(alignment: .center, spacing: 0) {
+                VStack(spacing: selectedSegment == .municipios ? 16 : 12) {
+
                     if selectedSegment == .employees {
                         if favoritos.isEmpty {
                             emptyState(
@@ -58,8 +49,6 @@ struct FavoritesView: View {
                                 cardFuncionario(f)
                             }
                         }
-                        
-                    // MARK: Municípios Favoritos
                     } else {
                         if municipiosFavoritos.isEmpty {
                             emptyState(
@@ -73,48 +62,48 @@ struct FavoritesView: View {
                         }
                     }
                 }
-                .padding(.vertical, 0)
-                .padding(.horizontal, 12)
+                // Removed .padding(.top, 60)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 20)
+                .frame(minWidth: 360) // ensure there's a base width for horizontal scroll
             }
-            .ignoresSafeArea(edges: .top)
+            .frame(maxWidth: .infinity)
         }
+        .safeAreaInset(edge: .top) {
+            StickyPickerBar(
+                segment: $selectedSegment,
+                employeeCount: favoritos.count,
+                municipioCount: municipiosFavoritos.count
+            )
+            .padding(.top, 20)
+            .padding(.horizontal, 12)
+            .background(.bar)
+        }
+
         .navigationTitle("Favoritos")
         .navigationBarTitleDisplayMode(.inline)
-        
-        // MARK: Toolbar
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarBackground(Color(.systemBackground), for: .navigationBar)
+        .toolbarColorScheme(.light, for: .navigationBar)
+
+
+        // 🟨 BOTTOM BAR – ZOOM CONTROL
         .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                if (selectedSegment == .employees && !favoritos.isEmpty)
-                    || (selectedSegment == .municipios && !municipiosFavoritos.isEmpty) {
-                    Button("Limpar") {
-                        if selectedSegment == .employees {
-                            removeAllFavorites()
-                        } else {
-                            removeAllFavoritesMunicipios()
-                        }
-                    }
-                }
-            }
-            ToolbarItem(placement: .navigationBarTrailing) {
-                ZoomMenuButton(persistedZoom: $persistedZoom)
-            }
-        }
-        .task {
-            guard !didSyncFromFirestore else { return }
-            didSyncFromFirestore = true
-            FirestoreMigrator.syncFromFirestoreToCoreData(context: viewContext) { result in
-                switch result {
-                case .success(let count):
-                    print("[Favorites] Synced \(count) funcionários from Firestore → Core Data")
-                case .failure(let error):
-                    print("[Favorites] Sync error: \(error.localizedDescription)")
+            ToolbarItem(placement: .bottomBar) {
+                HStack {
+                    Spacer()
+                    ZoomMenuButton(persistedZoom: $persistedZoom)
+                        .padding(.vertical, 8)
+                        .padding(.horizontal)
+                        .background(Capsule().fill(Color(.systemGray6)))
+                    Spacer()
                 }
             }
         }
-        
-        // MARK: Sheet de edição
+
+        // FORM DE EDIÇÃO
         .sheet(item: $funcionarioSelecionado) { funcionario in
-            NavigationView {
+            NavigationStack {
                 FuncionarioFormView(
                     regional: funcionario.regional ?? "",
                     funcionario: funcionario,
@@ -122,17 +111,17 @@ struct FavoritesView: View {
                 )
             }
         }
-        
-        // MARK: 🔥 Sincronização Core Data → Firestore
-        .onReceive(
-            NotificationCenter.default.publisher(for: .NSManagedObjectContextDidSave)
-                .receive(on: RunLoop.main)
-        ) { notification in
-            handleCoreDataSaveUpload(notification)
+
+        // SYNC FIRESTORE
+        .task {
+            if !didSyncFromFirestore {
+                didSyncFromFirestore = true
+                FirestoreMigrator.syncFromFirestoreToCoreData(context: viewContext) { _ in }
+            }
         }
     }
-    
-    // MARK: - Empty State
+
+    // MARK: - EMPTY STATE
     private func emptyState(title: String, description: String) -> some View {
         VStack(spacing: 10) {
             ContentUnavailableView(
@@ -140,17 +129,16 @@ struct FavoritesView: View {
                 systemImage: "star",
                 description: Text(description)
             )
-            Spacer(minLength: 400)
+            Spacer(minLength: 200)
         }
         .frame(maxWidth: .infinity, alignment: .top)
     }
-    
-    // MARK: - Card Funcionário
+
+    // MARK: - CARD FUNCIONARIO
     private func cardFuncionario(_ f: Funcionario) -> some View {
         HStack(spacing: 8) {
             NavigationLink(destination: FuncionarioDetailView(funcionario: f)) {
                 FuncionarioRowViewV2(funcionario: f, showsFavorite: false)
-                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
@@ -162,93 +150,127 @@ struct FavoritesView: View {
                     .frame(width: 44, height: 56)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Editar funcionário")
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(.quaternary, lineWidth: 0.5))
         .padding(.vertical, 6)
-        .padding(.horizontal, 12)
-        .frame(maxWidth: 528)
+        .frame(width:500)
     }
-    
-    // MARK: - Card Município
+
+    // MARK: - CARD MUNICIPIO
     private func cardMunicipio(_ m: Municipio) -> some View {
-        HStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(m.nome ?? "—")
-                    .font(.system(size: 26, weight: .bold))
-                Text(m.regional ?? "—")
-                    .font(.system(size: 23, weight: .bold))
-            }
-            Spacer()
-            
-            Button {
-                withAnimation {
-                    m.favorito.toggle()
-                    save()
-                    NotificationCenter.default.post(name: .funcionarioAtualizado, object: nil)
+        NavigationLink(destination: MunicipioDetailView(municipio: m)) {
+            HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(m.nome ?? "—")
+                        .font(.system(size: 26, weight: .bold))
+                    Text(m.regional ?? "—")
+                        .font(.system(size: 23, weight: .bold))
                 }
-            } label: {
-                Image(systemName: m.favorito ? "star.fill" : "star")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundColor(m.favorito ? .yellow : .gray)
-                    .frame(width: 56, height: 56)
-                    .background(Circle().fill(Color(.systemBackground)))
-                    .overlay(Circle().stroke(Color.black.opacity(0.4), lineWidth: 1))
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(.secondary)
             }
+            .padding(14)
+            .background(RoundedRectangle(cornerRadius: 12).stroke(Color.black, lineWidth: 2))
+            .frame(maxWidth: .infinity)
+            .frame(maxWidth: 528)
         }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 12).stroke(Color.black, lineWidth: 2))
-        .frame(maxWidth: 528)
+        .buttonStyle(.plain)
     }
-    
-    
-    // MARK: - Favoritos
+
+    // MARK: - REMOVE FAVORITOS
     private func removeAllFavorites() {
-        for f in favoritos { f.favorito = false }
+        favoritos.forEach { $0.favorito = false }
         save()
-        NotificationCenter.default.post(name: .funcionarioAtualizado, object: nil)
     }
-    
+
     private func removeAllFavoritesMunicipios() {
-        for m in municipiosFavoritos { m.favorito = false }
+        municipiosFavoritos.forEach { $0.favorito = false }
         save()
-        NotificationCenter.default.post(name: .funcionarioAtualizado, object: nil)
     }
-    
-    // MARK: Persistência local
+
     private func save() {
-        do {
-            try viewContext.save()
-        } catch {
-            print("Erro ao salvar favoritos: \(error.localizedDescription)")
-        }
+        do { try viewContext.save() }
+        catch { print("Erro ao salvar: \(error.localizedDescription)") }
     }
+}
+
+struct StickyPickerBar: View {
+    @Binding var segment: FavoritesView.Segment
+    let employeeCount: Int
+    let municipioCount: Int
+
+    var body: some View {
+        VStack(spacing: 10) {
+            PillSegmentedControl(
+                selection: $segment,
+                employeeCount: employeeCount,
+                municipioCount: municipioCount
+            )
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 8)
+        .background(.ultraThinMaterial)
+        .clipShape(Capsule())
+        .frame(maxWidth: 420)
+    }
+}
+
+
+
+struct PillSegmentedControl: View {
+    @Binding var selection: FavoritesView.Segment
+    let employeeCount: Int
+    let municipioCount: Int
     
-    // MARK: 🔥 Sincronização Core Data → Firestore
-    private func handleCoreDataSaveUpload(_ notification: Notification) {
-        guard let userInfo = notification.userInfo else { return }
-        let inserted = (userInfo[NSInsertedObjectsKey] as? Set<NSManagedObject>) ?? []
-        let updated = (userInfo[NSUpdatedObjectsKey] as? Set<NSManagedObject>) ?? []
-        let changed = inserted.union(updated)
-        
-        for obj in changed where obj is Funcionario {
-            FirestoreMigrator.uploadFuncionario(objectID: obj.objectID, context: viewContext) { result in
-                switch result {
-                case .success:
-                    print("[Favorites Sync] Upload OK: \(obj.objectID)")
-                case .failure(let error):
-                    print("[Favorites Sync] Upload ERRO: \(error.localizedDescription)")
-                }
+    @Namespace private var animation
+
+    var body: some View {
+        HStack(spacing: 8) {
+
+            segmentButton(.employees, title: "Funcionários", count: employeeCount)
+            segmentButton(.municipios, title: "Municípios", count: municipioCount)
+
+        }
+        .padding(6)
+        .background(
+            Capsule()
+                .fill(Color(.systemGray6).opacity(0.6))
+        )
+        .frame(maxWidth: 380)
+    }
+
+    // MARK: - Segment Button Builder
+    private func segmentButton(_ seg: FavoritesView.Segment, title: String, count: Int) -> some View {
+        ZStack {
+            if selection == seg {
+                Capsule()
+                    .fill(Color.blue)
+                    .matchedGeometryEffect(id: "SLIDE_PILL", in: animation)
+                    .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+            }
+
+            HStack(spacing: 6) {
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold))
+
+                Text("(\(count))")
+                    .font(.system(size: 14, weight: .medium))
+                    .opacity(0.8)
+            }
+            .foregroundColor(selection == seg ? .white : .primary)
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.9)) {
+                selection = seg
             }
         }
     }
 }
 
-
-// MARK: - Notifications
-extension NSNotification.Name {
-    static let funcionarioAtualizado = NSNotification.Name("funcionarioAtualizado")
-}

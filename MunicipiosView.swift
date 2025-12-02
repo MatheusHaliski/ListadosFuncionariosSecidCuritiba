@@ -73,7 +73,9 @@ struct MunicipiosView: View {
                 ScrollView([.vertical, .horizontal]) {
                     listaMunicipiosView
                 }
-            }}
+            }
+            .frame(maxWidth: .infinity)
+        }
         .navigationTitle("Municípios do Paraná")
         .toolbar {
             // 🔍 Lado esquerdo
@@ -170,20 +172,11 @@ struct MunicipiosView: View {
                             Text(regional).tag(regional)
                         }
                     }
-                    .pickerStyle(.segmented)
+                    .pickerStyle(.automatic)
                 }
-                // Inline analytics chart below the segmented picker
-                MunicipiosAnalyticsView(
-                    data: analyticsData,
-                    title: "Municípios por Regional",
-                    xValue: \.regional,
-                    yValue: \.count
-                )
-                .frame(height: 220)
-                .padding(.top, 8)
             }
             .padding()
-            .frame(width: 950)
+            .frame(maxWidth: 600)
             .background(
                 RoundedRectangle(cornerRadius: 12)
                     .stroke(Color.blue, lineWidth: 2)
@@ -198,15 +191,17 @@ struct MunicipiosView: View {
     private var listaMunicipiosView: some View {
         VStack(spacing: 0) {
             // Cabeçalho
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .center, spacing: 4) {
                 Text("Municípios")
                     .font(.headline)
                     .foregroundStyle(.primary)
+                    .multilineTextAlignment(.center)
                 Text("Regional do Paraná")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .center)
             .padding(.horizontal)
             .padding(.vertical, 8)
             .background(Color(.secondarySystemBackground))
@@ -214,17 +209,17 @@ struct MunicipiosView: View {
             // Linhas
             VStack(spacing: 0) {
                 ForEach(municipiosFiltrados, id: \.objectID) { (municipio: Municipio) in
-                    MunicipioRow(
-                        municipio: municipio,
-                        viewContext: viewContext,
-                        onToggleFavorite: {
-                            handleToggleFavorite(for: municipio)
-                        }
-                    )
+                    NavigationLink(destination: MunicipioDetailView(municipio: municipio)) {
+                        MunicipioRow(
+                            municipio: municipio,
+                            viewContext: viewContext
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }
-        .frame(width: 950)
+        .frame(maxWidth: 700)
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.blue, lineWidth: 2)
@@ -237,37 +232,6 @@ struct MunicipiosView: View {
     }
     
     // MARK: - Lógica de favorito + Firestore
-    
-    private func handleToggleFavorite(for municipio: Municipio) {
-        withAnimation {
-            // 1) Atualiza Core Data localmente
-            municipio.favorito = !(municipio.favorito == true)
-            do {
-                try viewContext.save()
-            } catch {
-                print("❌ Erro ao salvar Core Data: \(error.localizedDescription)")
-                return
-            }
-            
-            // 2) Envia apenas este município para o Firestore
-            FirestoreMigrator.uploadMunicipio(
-                objectID: municipio.objectID,
-                context: viewContext
-            ) { result in
-                switch result {
-                case .success:
-                    print("🔥 Município sincronizado imediatamente com Firestore!")
-                case .failure(let error):
-                    print("❌ Erro ao sincronizar município:", error.localizedDescription)
-                }
-                
-                // 3) Atualiza lista local
-                DispatchQueue.main.async {
-                    viewModel.fetchMunicipios()
-                }
-            }
-        }
-    }
 }
 
 // MARK: - Linha
@@ -275,25 +239,23 @@ struct MunicipiosView: View {
 struct MunicipioRow: View {
     let municipio: Municipio
     let viewContext: NSManagedObjectContext
-    let onToggleFavorite: () -> Void
 
     init(
         municipio: Municipio,
-        viewContext: NSManagedObjectContext,
-        onToggleFavorite: @escaping () -> Void
+        viewContext: NSManagedObjectContext
     ) {
         self.municipio = municipio
         self.viewContext = viewContext
-        self.onToggleFavorite = onToggleFavorite
     }
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .center, spacing: 8) {
                 Text(municipio.nome ?? "No name")
                     .font(.body.weight(.semibold))
                     .foregroundStyle(.primary)
-                
+                    .multilineTextAlignment(.center)
+
                 if let regional = municipio.regional, !regional.isEmpty {
                     HStack(spacing: 6) {
                         Image(systemName: "mappin.and.ellipse")
@@ -301,41 +263,19 @@ struct MunicipioRow: View {
                         Text(regional)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
                     }
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel("Regional: \(regional)")
                 }
             }
-            
-            Spacer(minLength: 8)
-            
-            Button(action: onToggleFavorite) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.black.opacity(0.6), lineWidth: 1.5)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color(.systemBackground))
-                        )
-                    Image(systemName: ((municipio.favorito as NSNumber?)?.boolValue == true) ? "star.fill" : "star")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(
-                            ((municipio.favorito as NSNumber?)?.boolValue == true)
-                            ? Color.red
-                            : Color.gray
-                        )
-                }
-                .frame(width: 44, height: 44)
-            }
-            .buttonStyle(.plain)
         }
         .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .center)
         .background(Color(.systemBackground))
         .overlay(
-            RoundedRectangle(cornerRadius: 0)
+            RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.blue, lineWidth: 1)
         )
     }
 }
-
