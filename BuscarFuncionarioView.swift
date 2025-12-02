@@ -11,7 +11,7 @@ struct BuscarFuncionarioView: View {
         sortDescriptors: [NSSortDescriptor(keyPath: \Funcionario.nome, ascending: true)],
         animation: .default
     ) private var funcionarios: FetchedResults<Funcionario>
-    
+    @State private var isScrolling = false
     // MARK: - Estados
     @State private var searchText = ""
     @State private var zoom: CGFloat = 1.0
@@ -36,14 +36,27 @@ struct BuscarFuncionarioView: View {
             return matchesSearch && matchesRegion
         }
     }
-    
+    struct ScrollOffsetKey: PreferenceKey {
+        static var defaultValue: CGFloat = 0
+        static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+            value = nextValue()
+        }
+    }
+
     // MARK: - Regionais dinâmicas
     var todasRegionais: [String] {
-        let set = Set(funcionarios.compactMap { f in
-            let r = f.regional?.trimmingCharacters(in: .whitespacesAndNewlines)
-            return (r?.isEmpty == false ? r : nil)
-        })
-        return Array(set).sorted()
+        // Build a unique, sorted list of non-empty region strings in a compiler-friendly way
+        var unique: Set<String> = []
+        for f in funcionarios {
+            if let raw = f.regional {
+                let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    unique.insert(trimmed)
+                }
+            }
+        }
+        let result = Array(unique).sorted()
+        return result
     }
     
     var body: some View {
@@ -82,34 +95,40 @@ struct BuscarFuncionarioView: View {
                 .padding(.bottom, 10)
                 .background(Color(.systemGroupedBackground))
                 
-                // MARK: - LISTA COM ZOOM
-                List {
-                    ForEach(filteredFuncionarios, id: \.objectID) { funcionario in
-                        HStack(spacing: 0) {
-                            
-                            NavigationLink(destination: FuncionarioDetailView(funcionario: funcionario)) {
-                                FuncionarioRowViewV2(funcionario: funcionario, showsFavorite: false)
-                                    .scaleEffect(zoom)
-                                    .padding(.vertical, 4)
+                ScrollViewReader { proxy in
+                    ScrollView([.vertical, .horizontal]) {
+                        LazyVStack(spacing: 0) {
+                            ForEach(filteredFuncionarios, id: \.objectID) { funcionario in
+                                CardRow(
+                                    funcionario: funcionario,
+                                    zoom: zoom,
+                                    isScrolling: isScrolling,
+                                    onEdit: { funcionarioParaEditar = funcionario }
+                                )
                             }
-                            
-                            Button {
-                                funcionarioParaEditar = funcionario
-                            } label: {
-                                Image(systemName: "pencil")
-                                    .foregroundStyle(.blue)
-                                    .frame(width: 44, height: 56)
+                        }
+                        .background(
+                            GeometryReader { geo in
+                                Color.clear
+                                    .preference(key: ScrollOffsetKey.self,
+                                                value: geo.frame(in: .named("scroll")).minY)
                             }
-                            .buttonStyle(.plain)
+                        )
+                    }
+                    .coordinateSpace(name: "scroll")
+                    .onPreferenceChange(ScrollOffsetKey.self) { _ in
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isScrolling = true
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isScrolling = false
+                            }
                         }
                     }
-                    
-                    if filteredFuncionarios.isEmpty {
-                        Text("Nenhum funcionário encontrado")
-                            .foregroundStyle(.secondary)
-                            .padding()
-                    }
                 }
+
+
             }
             .navigationTitle("Buscar Funcionário")
             .toolbar {
