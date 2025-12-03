@@ -61,42 +61,42 @@ struct BuscarFuncionarioView: View {
     
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                
-                // MARK: - HEADER (Formulário)
-                VStack(spacing: 14) {
-                    
-                    // Campo de busca
-                    TextField("Buscar por nome, função ou regional", text: $searchText)
-                        .textFieldStyle(.roundedBorder)
-                        .padding(.horizontal)
-                        .padding(.top, 8)
-                    
-                    // Picker de regionais
-                    Picker("Regional", selection: $regionalSelecionada) {
-                        Text("Todas").tag("")
-                        ForEach(todasRegionais, id: \.self) { reg in
-                            Text(reg).tag(reg)
+            ScrollViewReader { proxy in
+                ScrollView([.vertical, .horizontal], showsIndicators: true) {
+                    VStack(spacing: 0) {
+
+                        // MARK: - HEADER (Formulário)
+                        VStack(spacing: 14) {
+
+                            // Campo de busca
+                            TextField("Buscar por nome, função ou regional", text: $searchText)
+                                .textFieldStyle(.roundedBorder)
+                                .padding(.horizontal)
+                                .padding(.top, 8)
+
+                            // Picker de regionais
+                            Picker("Regional", selection: $regionalSelecionada) {
+                                Text("Todas").tag("")
+                                ForEach(todasRegionais, id: \.self) { reg in
+                                    Text(reg).tag(reg)
+                                }
+                            }
+                            .pickerStyle(.automatic)
+                            .padding(.horizontal)
+
+                            // Zoom Slider
+                            VStack(alignment: .leading) {
+                                Text("Zoom da Lista")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                Slider(value: $zoom, in: 0.8...1.6, step: 0.05)
+                            }
+                            .padding(.horizontal)
+                            .padding(.top, 4)
                         }
-                    }
-                    .pickerStyle(.automatic)
-                    .padding(.horizontal)
-                    
-                    // Zoom Slider
-                    VStack(alignment: .leading) {
-                        Text("Zoom da Lista")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                        Slider(value: $zoom, in: 0.8...1.6, step: 0.05)
-                    }
-                    .padding(.horizontal)
-                    .padding(.top, 4)
-                }
-                .padding(.bottom, 10)
-                .background(Color(.systemGroupedBackground))
-                
-                ScrollViewReader { proxy in
-                    ScrollView([.vertical, .horizontal]) {
+                        .padding(.bottom, 10)
+                        .background(Color(.systemGroupedBackground))
+
                         LazyVStack(spacing: 0) {
                             ForEach(filteredFuncionarios, id: \.objectID) { funcionario in
                                 CardRow(
@@ -114,21 +114,22 @@ struct BuscarFuncionarioView: View {
                                                 value: geo.frame(in: .named("scroll")).minY)
                             }
                         )
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
                     }
-                    .coordinateSpace(name: "scroll")
-                    .onPreferenceChange(ScrollOffsetKey.self) { _ in
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
+                .coordinateSpace(name: "scroll")
+                .scrollIndicators(.visible)
+                .onPreferenceChange(ScrollOffsetKey.self) { _ in
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isScrolling = true
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                         withAnimation(.easeInOut(duration: 0.2)) {
-                            isScrolling = true
-                        }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                isScrolling = false
-                            }
+                            isScrolling = false
                         }
                     }
                 }
-
-
             }
             .navigationTitle("Buscar Funcionário")
             .toolbar {
