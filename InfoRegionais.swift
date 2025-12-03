@@ -16,72 +16,81 @@ struct InfoRegionais: View {
         RegionalInfo(regional: "Regional 5", chefe: "Nome do Chefe", ramalRegional: "0000")
     ]
 
-    private var colunasFlex: [GridItem] {
-        [
-            GridItem(.flexible(minimum: 120), alignment: .leading),
-            GridItem(.flexible(minimum: 140), alignment: .leading),
-            GridItem(.flexible(minimum: 100), alignment: .leading)
-        ]
-    }
+    private let columnSpacing: CGFloat = 16
 
     var body: some View {
-        ScrollView([.vertical, .horizontal]) {
-            LazyVGrid(columns: colunasFlex, alignment: .leading, spacing: 12, pinnedViews: [.sectionHeaders]) {
-                Section(header: headerView) {
-                    ForEach(dadosRegionais) { regional in
-                        HStack(spacing: 12) {
-                            Text(regional.regional)
-                                .font(.headline)
-                                .foregroundColor(.primary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            Text(regional.chefe)
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            Text(regional.ramalRegional)
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+        ScrollView {
+            VStack(spacing: 16) {
+                VStack(spacing: 0) {
+                    headerRow
+                    Divider()
+
+                    ForEach(dadosRegionais.indices, id: \.self) { index in
+                        rowView(dadosRegionais[index])
+
+                        if index < dadosRegionais.count - 1 {
+                            Divider()
                         }
-                        .padding()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(.thinMaterial)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
                     }
                 }
+                .padding(.vertical, 12)
+                .padding(.horizontal, 16)
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                )
             }
             .padding()
         }
-        .navigationTitle("Informações Regionais")
         .background(Color(.systemGroupedBackground))
+        .navigationTitle("Informações Regionais")
     }
 
-    private var headerView: some View {
-        HStack(spacing: 12) {
-            Label("Regional", systemImage: "building.2.fill")
-                .font(.subheadline.weight(.semibold))
-                .foregroundColor(.primary)
+    private var headerRow: some View {
+        HStack(spacing: columnSpacing) {
+            headerCell(title: "Regional", systemImage: "building.2")
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Label("Chefe", systemImage: "person.fill")
-                .font(.subheadline.weight(.semibold))
-                .foregroundColor(.primary)
+
+            headerCell(title: "Chefe", systemImage: "person.fill")
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Label("Ramal", systemImage: "phone.fill")
-                .font(.subheadline.weight(.semibold))
-                .foregroundColor(.primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+
+            headerCell(title: "Ramal", systemImage: "phone.fill")
+                .frame(width: 120, alignment: .leading)
         }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(LinearGradient(colors: [Color.blue.opacity(0.15), Color.indigo.opacity(0.2)], startPoint: .topLeading, endPoint: .bottomTrailing))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.blue.opacity(0.25), lineWidth: 1)
-        )
-        .padding(.bottom, 4)
+        .padding(.vertical, 4)
+    }
+
+    private func headerCell(title: String, systemImage: String) -> some View {
+        Label(title, systemImage: systemImage)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.primary)
+    }
+
+    private func rowView(_ info: RegionalInfo) -> some View {
+        HStack(spacing: columnSpacing) {
+            Text(info.regional)
+                .font(.headline)
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .lineLimit(1)
+                .minimumScaleFactor(0.9)
+
+            Text(info.chefe)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .lineLimit(1)
+                .minimumScaleFactor(0.9)
+
+            Text(info.ramalRegional)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .frame(width: 120, alignment: .leading)
+                .monospacedDigit()
+        }
+        .padding(.vertical, 8)
     }
 }
 
