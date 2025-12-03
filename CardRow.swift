@@ -31,6 +31,7 @@ struct CardRow: View {
                 PencilPanel(isScrolling: isScrolling)
             }
             .buttonStyle(.plain)
+            .foregroundColor(.blue)
         }
         .padding(.vertical, 10 * zoom)
         .padding(.horizontal, 12)
