@@ -37,7 +37,7 @@ extension View {
 
 // MARK: - Zoom Controls Modifier (top placement)
 private struct ZoomControlsModifier: ViewModifier {
-    @AppStorage("app_zoom_scale") private var persistedZoom: Double = 1.05
+    @AppStorage("app_zoom_scale") private var persistedZoom: Double = 1.35
 
     func body(content: Content) -> some View {
         content
@@ -78,36 +78,17 @@ extension View {
 struct HomeView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.appZoomScale) private var appZoom
-
+    @State private var funcionario: Funcionario? = nil
     @State private var mostrandoFormulario = false
     @State private var mostrandoSobreSECID = false
     @State private var selectedRegional: String = ""
     @AppStorage("app_zoom_scale") private var persistedZoom: Double = 1.0
-    @AppStorage("app_theme_preference") private var themePreference: String = "system"
 
     let regionais = ["Filtrar lista por regional"]
 
-    private func colorSchemeFromPreference(_ value: String) -> ColorScheme? {
-        switch value {
-        case "light": return .light
-        case "dark": return .dark
-        default: return nil // system
-        }
-    }
-
     var body: some View {
         NavigationStack {
-            ZoomableScrollView(
-                minZoomScale: 0.8,
-                maxZoomScale: 2.0,
-                scale: Binding(
-                    get: { CGFloat(persistedZoom) },
-                    set: { persistedZoom = Double($0) }
-                ),
-                onZoom: { newScale in
-                    persistedZoom = Double(newScale)
-                }
-            ) {
+            ScrollView([.vertical, .horizontal]) {
                 VStack {
                     VStack(spacing: 20) {
                         // 🔹 Cabeçalho com logo
@@ -143,18 +124,35 @@ struct HomeView: View {
                         // 🔹 Botões principais
                         Button(action: {
                             selectedRegional = ""
+                            let newFuncionario = Funcionario(context: viewContext)
+                            newFuncionario.nome = ""
+                            newFuncionario.funcao = ""
+                            newFuncionario.celular = ""
+                            newFuncionario.email = ""
+                            newFuncionario.favorito = false
+                            newFuncionario.ramal = ""
+                            newFuncionario.regional = ""
+                            self.funcionario = newFuncionario
                             mostrandoFormulario = true
                         }) {
                             HomeRow(icon: "person.badge.plus", color: .white, text: "Adicionar Funcionário")
                         }
                         .sheet(isPresented: $mostrandoFormulario) {
-                            NavigationView {
-                                FuncionarioFormView(
-                                    regional: selectedRegional,
-                                    funcionario: Funcionario(context: viewContext),
-                                    isEditando: false
-                                )
-                                .environment(\.managedObjectContext, viewContext)
+                            if let funcionario = funcionario {
+                                NavigationView {
+                                    FuncionarioFormView(
+                                        regional: selectedRegional,
+                                        funcionario: funcionario,
+                                        isEditando: false
+                                    )
+                                    .environment(\.managedObjectContext, viewContext)
+                                }
+                            } else {
+                                // Fallback in the unlikely case it's nil
+                                NavigationView {
+                                    Text("Erro ao criar funcionário.")
+                                        .padding()
+                                }
                             }
                         }
 
@@ -164,10 +162,6 @@ struct HomeView: View {
 
                         NavigationLink(destination: FavoritesView().appHeaderFooter().appBidirectionalScroll()) {
                             HomeRow(icon: "star.fill", color: .yellow, text: "Favoritos")
-                        }
-
-                        NavigationLink(destination: InfoRegionais().appHeaderFooter().appBidirectionalScroll()) {
-                            HomeRow(icon: "tablecells.fill", color: .green, text: "Informações Regionais")
                         }
 
                         NavigationLink(destination: MunicipiosView(context: viewContext).appHeaderFooter()) {
@@ -180,12 +174,17 @@ struct HomeView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.horizontal)
                 }
-                .padding(.bottom, 100)
+                .padding(.bottom, 400)
+                .padding(.top, 1000)
+                .frame(width: 2500, height: 2500, alignment:.topTrailing )
+
                 .frame(maxWidth: .infinity, alignment: .center)
                 .background(Color(.systemGroupedBackground))
                 .navigationTitle("Regionais SECID")
                 .navigationBarTitleDisplayMode(.inline)
                 .appZoomScale(CGFloat(persistedZoom))
+                .scaleEffect(persistedZoom)
+                .animation(.easeInOut, value: persistedZoom) 
             }
             .toolbar {
                 // 🔹 Botão "Sobre a SECID"
@@ -204,7 +203,11 @@ struct HomeView: View {
                 // 🔹 Menu de tema
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
-                        Picker("Theme", selection: $themePreference) {
+                        Picker("Theme", selection: Binding(
+                            get: { UserDefaults.standard.string(forKey: "app_theme_preference") ?? "system" },
+                            set: { UserDefaults.standard.set($0, forKey: "app_theme_preference") }
+                        )) {
+                            Text("System").tag("system")
                             Text("Light").tag("light")
                             Text("Dark").tag("dark")
                         }
@@ -213,41 +216,12 @@ struct HomeView: View {
                         Label("Theme", systemImage: "moon.circle")
                     }
                 }
-
-                #if DEBUG
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        let context = PersistenceController.shared.container.viewContext
-                        print("[Migration] Starting Core Data -> Firestore migration to 'employees' collection...")
-                        FirestoreMigrator.migrateFuncionariosToFirestore(from: context) { result in
-                            switch result {
-                            case .success(let count):
-                                print("[Migration] Completed successfully. Migrated documents: \(count)")
-                            case .failure(let error):
-                                print("[Migration] Failed with error: \(error.localizedDescription)")
-                            }
-                            FirestoreMigrator.migrateMunicipiosToFirestore(from: context) { muniResult in
-                                switch muniResult {
-                                case .success(let count):
-                                    print("[Migration] Municipios migration completed. Migrated: \(count)")
-                                case .failure(let error):
-                                    print("[Migration] Municipios migration failed: \(error.localizedDescription)")
-                                }
-                            }
-                        }
-                    }) {
-                        Label("Migrate to Firestore", systemImage: "arrow.up.doc")
-                    }
-                }
-                #endif
-
-                ToolbarItem(placement: .principal) {
                     ZoomMenuButton(persistedZoom: $persistedZoom)
                 }
             }
         }
         // 🔹 Garante que o zoom é herdado por toda a NavigationView
-        .preferredColorScheme(colorSchemeFromPreference(themePreference))
         .appZoomScale(CGFloat(persistedZoom))
     }
 }
@@ -304,3 +278,4 @@ struct HomeRow: View {
         .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 4)
     }
 }
+
