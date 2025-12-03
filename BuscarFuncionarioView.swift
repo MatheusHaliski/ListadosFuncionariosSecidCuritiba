@@ -61,112 +61,113 @@ struct BuscarFuncionarioView: View {
     
     var body: some View {
         NavigationStack {
+            // OUTER BOX: scrollable container with both axes + visible indicators
             ScrollView([.vertical, .horizontal]) {
-                VStack{
-                    ScrollViewReader { proxy in
-                        ScrollView([.vertical, .horizontal], showsIndicators: true) {
-                            VStack(spacing: 20) {
-                                
-                                // MARK: - HEADER (Formulário)
-                                VStack(spacing: 14) {
-                                    
-                                    // Campo de busca
-                                    TextField("Buscar por nome, função ou regional", text: $searchText)
-                                        .textFieldStyle(.roundedBorder)
-                                        .padding(.horizontal)
-                                        .padding(.top, 8)
-                                    
-                                    // Picker de regionais
-                                    Picker("Regional", selection: $regionalSelecionada) {
-                                        Text("Todas").tag("")
-                                        ForEach(todasRegionais, id: \.self) { reg in
-                                            Text(reg).tag(reg)
-                                        }
-                                    }
-                                    .pickerStyle(.automatic)
-                                    .padding(.horizontal)
-                                    
-                                    // Zoom Slider
-                                    VStack(alignment: .leading) {
-                                        Text("Zoom da Lista")
-                                            .font(.footnote)
-                                            .foregroundStyle(.secondary)
-                                        Slider(value: $zoom, in: 0.8...1.6, step: 0.05)
-                                    }
-                                    .padding(.horizontal)
-                                    .padding(.top, 4)
-                                }
-                                .padding(.bottom, 10)
-                                .background(Color(.systemGroupedBackground))
-                                
-                                LazyVStack(spacing: 0) {
-                                    ForEach(filteredFuncionarios, id: \.objectID) { funcionario in
-                                        CardRow(
-                                            funcionario: funcionario,
-                                            zoom: zoom,
-                                            isScrolling: isScrolling,
-                                            onEdit: { funcionarioParaEditar = funcionario }
-                                        )
-                                    }
-                                }
-                                .background(
-                                    GeometryReader { geo in
-                                        Color.clear
-                                            .preference(key: ScrollOffsetKey.self,
-                                                        value: geo.frame(in: .named("scroll")).minY)
-                                    }
-                                )
-                                .frame(maxWidth: .infinity, alignment: .topLeading)
-                            }
-                            .frame(width: 1500, height: 1500, alignment: .topLeading)
-                        }
-                        .coordinateSpace(name: "scroll")
-                        .scrollIndicators(.visible)
-                        .onPreferenceChange(ScrollOffsetKey.self) { _ in
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                isScrolling = true
-                            }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    isScrolling = false
-                                }
-                            }
-                        }
-                    }
-                    .navigationTitle("Buscar Funcionário")
-                    .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button {
-                                mostrandoGrafico = true
-                            } label: {
-                                Image(systemName: "chart.bar.fill")
-                            }
-                            .accessibilityLabel("Mostrar gráfico de regionais")
-                        }
-                    }
-                    .sheet(item: $funcionarioParaEditar) { funcionario in
-                        EditFuncionarioPlaceholderView(funcionario: funcionario)
-                    }
-                    .sheet(isPresented: $mostrandoGrafico) {
-                        GraficoFuncionariosPorRegionalView(
-                            data: AnalyticsAggregator.aggregateFuncionariosByRegional(Array(funcionarios))
+                ZStack {
+                    // Outer visual box background
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color(.secondarySystemBackground))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color(.separator), lineWidth: 1)
                         )
+
+                    // Content inside the outer box
+                    VStack(spacing: 0) {
+                        // HEADER (Formulário)
+                        VStack(spacing: 14) {
+                            // Campo de busca
+                            TextField("Buscar por nome, função ou regional", text: $searchText)
+                                .textFieldStyle(.roundedBorder)
+                                .padding(.horizontal)
+                                .padding(.top, 8)
+
+                            // Picker de regionais
+                            Picker("Regional", selection: $regionalSelecionada) {
+                                Text("Todas").tag("")
+                                ForEach(todasRegionais, id: \.self) { reg in
+                                    Text(reg).tag(reg)
+                                }
+                            }
+                            .pickerStyle(.automatic)
+                            .padding(.horizontal)
+
+                            // Zoom Slider
+                            VStack(alignment: .leading) {
+                                Text("Zoom da Lista")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                Slider(value: $zoom, in: 0.8...1.6, step: 0.05)
+                            }
+                            .padding(.horizontal)
+                            .padding(.top, 4)
+                        }
+                        .padding(.vertical, 12)
+                        .background(Color(.systemGroupedBackground))
+
+                        // Some intentional blank space between header and inner box
+                        Spacer(minLength: 12)
+
+                        // INNER BOX: contains only the table/list
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color(.systemBackground))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color(.separator), lineWidth: 1)
+                                )
+
+                            // The table/list content
+                            LazyVStack(spacing: 0) {
+                                ForEach(filteredFuncionarios, id: \.objectID) { funcionario in
+                                    CardRow(
+                                        funcionario: funcionario,
+                                        zoom: zoom,
+                                        isScrolling: isScrolling,
+                                        onEdit: { funcionarioParaEditar = funcionario }
+                                    )
+                                }
+                            }
+                            .padding(12)
+                        }
+                        .padding([.horizontal, .bottom], 12)
+
+                        // Extra blank space inside the outer box after the inner table
+                        Spacer(minLength: 16)
                     }
-                    .task(id: "firestoreSyncOnce") {
-                        guard !didSyncFromFirestore else { return }
-                        didSyncFromFirestore = true
-                        FirestoreMigrator.syncFromFirestoreToCoreData(context: context) { _ in }
-                    }
+                    .padding(16)
                 }
-                .frame(width:4500,height:4500)
+                // Minimum size so the box is visible; larger content will expand and scroll
+                .frame(minWidth: 1200, minHeight: 900)
             }
-           
+            .scrollIndicators(.visible)
+            .navigationTitle("Buscar Funcionário")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        mostrandoGrafico = true
+                    } label: {
+                        Image(systemName: "chart.bar.fill")
+                    }
+                    .accessibilityLabel("Mostrar gráfico de regionais")
+                }
+            }
+            .sheet(item: $funcionarioParaEditar) { funcionario in
+                EditFuncionarioPlaceholderView(funcionario: funcionario)
+            }
+            .sheet(isPresented: $mostrandoGrafico) {
+                GraficoFuncionariosPorRegionalView(
+                    data: AnalyticsAggregator.aggregateFuncionariosByRegional(Array(funcionarios))
+                )
+            }
+            .task(id: "firestoreSyncOnce") {
+                guard !didSyncFromFirestore else { return }
+                didSyncFromFirestore = true
+                FirestoreMigrator.syncFromFirestoreToCoreData(context: context) { _ in }
+            }
         }
-        
     }
 }
-
-
 
 struct EditFuncionarioPlaceholderView: View {
     @Environment(\.dismiss) private var dismiss
