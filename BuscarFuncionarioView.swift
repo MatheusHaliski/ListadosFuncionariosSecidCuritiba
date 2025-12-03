@@ -66,56 +66,113 @@ struct BuscarFuncionarioView: View {
                 ZStack {
                     // Outer visual box background
                     RoundedRectangle(cornerRadius: 16)
-                        .fill(Color(.secondarySystemBackground))
+                        .fill(Color(.white))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 16)
-                                .stroke(Color(.separator), lineWidth: 1)
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(Color.blue.opacity(1.25), lineWidth: 6)
                         )
 
                     // Content inside the outer box
                     VStack(spacing: 0) {
-                        // HEADER (Formulário)
-                        VStack(spacing: 14) {
-                            // Campo de busca
-                            TextField("Buscar por nome, função ou regional", text: $searchText)
-                                .textFieldStyle(.roundedBorder)
-                                .padding(.horizontal)
-                                .padding(.top, 8)
-
-                            // Picker de regionais
-                            Picker("Regional", selection: $regionalSelecionada) {
-                                Text("Todas").tag("")
-                                ForEach(todasRegionais, id: \.self) { reg in
-                                    Text(reg).tag(reg)
+                        // MARK: - PROFESSIONAL FILTER PANEL
+                        VStack(alignment: .leading, spacing: 20) {
+                            
+                            // ---------- Title ----------
+                            HStack(spacing: 10) {
+                                Image(systemName: "line.3.horizontal.decrease.circle.fill")
+                                    .font(.largeTitle)
+                                    .foregroundStyle(.blue)
+                                Text("Filtros")
+                                    .font(.title2.weight(.semibold))
+                                    .foregroundStyle(.primary)
+                            }
+                            .padding(.bottom, 4)
+                            
+                            
+                            // ---------- Search Bar ----------
+                            HStack(spacing: 8) {
+                                Image(systemName: "magnifyingglass")
+                                    .foregroundStyle(.secondary)
+                                
+                                TextField("Buscar por nome, função ou regional",
+                                          text: $searchText)
+                                    .textInputAutocapitalization(.words)
+                                    .disableAutocorrection(true)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                            .stroke(Color.blue.opacity(1.2), lineWidth: 2)
+                                    )
+                                if !searchText.isEmpty {
+                                    Button {
+                                        searchText = ""
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
                             }
-                            .pickerStyle(.automatic)
-                            .padding(.horizontal)
-
-                            // Zoom Slider
-                            VStack(alignment: .leading) {
-                                Text("Zoom da Lista")
-                                    .font(.footnote)
+                            .padding(12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .fill(Color.white)
+                            )
+                            
+                            // ---------- Region Picker ----------
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Regional")
+                                    .font(.headline)
                                     .foregroundStyle(.secondary)
+                                
+                                Picker("Regional", selection: $regionalSelecionada) {
+                                    Text("Todas").tag("")
+                                    ForEach(todasRegionais, id: \.self) { reg in
+                                        Text(reg).tag(reg)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .fill(Color.white)
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .stroke(Color.blue.opacity(0.2), lineWidth: 2)
+                                )
+                            }
+                            
+                            
+                            // ---------- Zoom Slider ----------
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text("Zoom da Lista")
+                                        .font(.headline)
+                                        .foregroundStyle(.secondary)
+                                    Spacer()
+                                    Text("\(Int(zoom * 100))%")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                
                                 Slider(value: $zoom, in: 0.8...1.6, step: 0.05)
                             }
-                            .padding(.horizontal)
-                            .padding(.top, 4)
                         }
-                        .padding(.vertical, 12)
-                        .background(Color(.systemGroupedBackground))
-
-                        // Some intentional blank space between header and inner box
-                        Spacer(minLength: 12)
+                        .padding(20)
+                        .background(
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .fill(Color.white)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .stroke(Color.blue.opacity(0.35), lineWidth: 6)
+                        )
+                        .padding(.horizontal)
+                        .padding(.top, 12)
 
                         // INNER BOX: contains only the table/list
                         VStack {
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color(.systemBackground))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Color(.separator), lineWidth: 1)
-                                )
 
                             // The table/list content
                             LazyVStack(spacing: 0) {
@@ -128,12 +185,11 @@ struct BuscarFuncionarioView: View {
                                     )
                                 }
                             }
-                            .padding(12)
+                            .padding(.top,52)
+                            .background(Color(.white))
                         }
+                        .padding(.top,52)
                        
-
-                        // Extra blank space inside the outer box after the inner table
-                        Spacer(minLength: 16)
                     }
                 
                 }
