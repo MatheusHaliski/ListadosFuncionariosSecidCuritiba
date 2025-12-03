@@ -22,10 +22,10 @@ struct PencilPanel: View {
         ZStack(alignment: .center) {
             VStack(spacing: 6) {
                 Image(systemName: "pencil")
-                    .font(.system(size: 18, weight: .medium))
+                    .font(.system(size: 48, weight: .medium))
                     .foregroundColor(.black)
 
-                Text("Edit")
+                Text("Editar")
                     .font(.caption2)
                     .foregroundColor(.black.opacity(0.8))
                     .multilineTextAlignment(.center)
@@ -33,10 +33,10 @@ struct PencilPanel: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             .padding(.horizontal, 12)
         }
-        .frame(height: rowHeight)
+        .frame(height: 100)
         .background(
             RoundedRectangle(cornerRadius: 2)
-                .fill(Color(.systemBackground))
+                .fill(Color(.green))
         )
         .opacity(isScrolling ? 0 : 1)
         .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
