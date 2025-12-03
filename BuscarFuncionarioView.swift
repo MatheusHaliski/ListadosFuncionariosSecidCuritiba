@@ -109,7 +109,7 @@ struct BuscarFuncionarioView: View {
                         Spacer(minLength: 12)
 
                         // INNER BOX: contains only the table/list
-                        ZStack {
+                        VStack {
                             RoundedRectangle(cornerRadius: 12)
                                 .fill(Color(.systemBackground))
                                 .overlay(
@@ -130,15 +130,19 @@ struct BuscarFuncionarioView: View {
                             }
                             .padding(12)
                         }
-                        .padding([.horizontal, .bottom], 12)
+                       
 
                         // Extra blank space inside the outer box after the inner table
                         Spacer(minLength: 16)
                     }
-                    .padding(16)
+                
                 }
+                .padding(.top, 600)
+                .padding(.bottom,300)
+                .padding(.leading,600)
+                .padding(.trailing,600)
                 // Minimum size so the box is visible; larger content will expand and scroll
-                .frame(minWidth: 1200, minHeight: 900)
+                .frame(minWidth: 2200, minHeight: 900)
             }
             .scrollIndicators(.visible)
             .navigationTitle("Buscar Funcionário")
