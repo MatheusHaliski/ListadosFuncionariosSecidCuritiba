@@ -16,99 +16,81 @@ struct InfoRegionais: View {
         RegionalInfo(regional: "Regional 5", chefe: "Nome do Chefe", ramalRegional: "0000")
     ]
 
+    private let columnSpacing: CGFloat = 16
+
     var body: some View {
         ScrollView {
-            tableView
-                .padding()
+            VStack(spacing: 16) {
+                VStack(spacing: 0) {
+                    headerRow
+                    Divider()
+
+                    ForEach(dadosRegionais.indices, id: \.self) { index in
+                        rowView(dadosRegionais[index])
+
+                        if index < dadosRegionais.count - 1 {
+                            Divider()
+                        }
+                    }
+                }
+                .padding(.vertical, 12)
+                .padding(.horizontal, 16)
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                )
+            }
+            .padding()
         }
-        .background(Color.white)
+        .background(Color(.systemGroupedBackground))
         .navigationTitle("Informações Regionais")
     }
 
-    private var tableView: some View {
-        VStack(spacing: 0) {
-            headerRow
-            horizontalSeparator
-
-            ForEach(dadosRegionais.indices, id: \.self) { index in
-                rowView(dadosRegionais[index])
-
-                if index < dadosRegionais.count - 1 {
-                    horizontalSeparator
-                }
-            }
-        }
-        .background(Color.white)
-        .overlay(
-            Rectangle()
-                .stroke(Color.black, lineWidth: 1)
-        )
-    }
-
     private var headerRow: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: columnSpacing) {
             headerCell(title: "Regional", systemImage: "building.2")
                 .frame(maxWidth: .infinity, alignment: .leading)
-
-            verticalSeparator
 
             headerCell(title: "Chefe", systemImage: "person.fill")
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            verticalSeparator
-
             headerCell(title: "Ramal", systemImage: "phone.fill")
                 .frame(width: 120, alignment: .leading)
         }
+        .padding(.vertical, 4)
     }
 
     private func headerCell(title: String, systemImage: String) -> some View {
         Label(title, systemImage: systemImage)
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(.primary)
-            .padding(.vertical, 8)
-            .padding(.horizontal, 12)
-            .background(Color.white)
     }
 
     private func rowView(_ info: RegionalInfo) -> some View {
-        HStack(spacing: 0) {
-            tableCell(info.regional, isHeader: false)
+        HStack(spacing: columnSpacing) {
+            Text(info.regional)
+                .font(.headline)
+                .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .lineLimit(1)
+                .minimumScaleFactor(0.9)
 
-            verticalSeparator
-
-            tableCell(info.chefe, isHeader: false)
+            Text(info.chefe)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .lineLimit(1)
+                .minimumScaleFactor(0.9)
 
-            verticalSeparator
-
-            tableCell(info.ramalRegional, isHeader: false)
+            Text(info.ramalRegional)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
                 .frame(width: 120, alignment: .leading)
+                .monospacedDigit()
         }
-    }
-
-    private func tableCell(_ text: String, isHeader: Bool) -> some View {
-        Text(text)
-            .font(isHeader ? .subheadline.weight(.semibold) : .body)
-            .foregroundStyle(isHeader ? .primary : .secondary)
-            .lineLimit(1)
-            .minimumScaleFactor(0.9)
-            .padding(.vertical, 10)
-            .padding(.horizontal, 12)
-            .background(Color.white)
-    }
-
-    private var verticalSeparator: some View {
-        Rectangle()
-            .fill(Color.black)
-            .frame(width: 1)
-    }
-
-    private var horizontalSeparator: some View {
-        Rectangle()
-            .fill(Color.black)
-            .frame(height: 1)
+        .padding(.vertical, 8)
     }
 }
 
