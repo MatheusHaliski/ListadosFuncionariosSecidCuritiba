@@ -97,7 +97,17 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView([.vertical, .horizontal]) {
+            ZoomableScrollView(
+                minZoomScale: 0.8,
+                maxZoomScale: 2.0,
+                scale: Binding(
+                    get: { CGFloat(persistedZoom) },
+                    set: { persistedZoom = Double($0) }
+                ),
+                onZoom: { newScale in
+                    persistedZoom = Double(newScale)
+                }
+            ) {
                 VStack {
                     VStack(spacing: 20) {
                         // 🔹 Cabeçalho com logo
@@ -176,8 +186,6 @@ struct HomeView: View {
                 .navigationTitle("Regionais SECID")
                 .navigationBarTitleDisplayMode(.inline)
                 .appZoomScale(CGFloat(persistedZoom))
-                .scaleEffect(persistedZoom)
-                .animation(.easeInOut, value: persistedZoom)
             }
             .toolbar {
                 // 🔹 Botão "Sobre a SECID"
