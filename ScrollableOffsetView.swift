@@ -64,7 +64,6 @@ private struct ScrollableOffsetRepresentable<Content: View>: UIViewRepresentable
 
         context.coordinator.hostingController = hostingController
         context.coordinator.initialOffset = initialOffset
-        context.coordinator.lastContentOffset = initialOffset
 
         scrollView.addSubview(hostingController.view)
 
@@ -97,12 +96,6 @@ private struct ScrollableOffsetRepresentable<Content: View>: UIViewRepresentable
             DispatchQueue.main.async {
                 scrollView.setContentOffset(initialOffset, animated: false)
             }
-        } else {
-            let offsetToRestore = context.coordinator.lastContentOffset
-            DispatchQueue.main.async {
-                guard !scrollView.isDragging, !scrollView.isDecelerating, !scrollView.isTracking else { return }
-                scrollView.setContentOffset(offsetToRestore, animated: false)
-            }
         }
     }
 
@@ -110,15 +103,6 @@ private struct ScrollableOffsetRepresentable<Content: View>: UIViewRepresentable
         var hostingController: UIHostingController<Content>?
         var didApplyInitialOffset = false
         var initialOffset: CGPoint = .zero
-        var lastContentOffset: CGPoint = .zero
-
-        func scrollViewDidScroll(_ scrollView: UIScrollView) {
-            // Capture the latest position driven by the user to keep SwiftUI state updates
-            // from jumping the canvas when interacting with inputs inside the scroll view.
-            if scrollView.isDragging || scrollView.isDecelerating {
-                lastContentOffset = scrollView.contentOffset
-            }
-        }
     }
 }
 #endif
