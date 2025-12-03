@@ -156,6 +156,10 @@ struct HomeView: View {
                             HomeRow(icon: "star.fill", color: .yellow, text: "Favoritos")
                         }
 
+                        NavigationLink(destination: InfoRegionais().appHeaderFooter().appBidirectionalScroll()) {
+                            HomeRow(icon: "tablecells.fill", color: .green, text: "Informações Regionais")
+                        }
+
                         NavigationLink(destination: MunicipiosView(context: viewContext).appHeaderFooter()) {
                             HomeRow(icon: "map.fill", color: .orange, text: "Ver Municípios")
                         }
