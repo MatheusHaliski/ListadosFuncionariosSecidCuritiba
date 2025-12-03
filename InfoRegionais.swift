@@ -17,17 +17,18 @@ struct InfoRegionais: View {
         RegionalInfo(regional: "Regional 5", chefe: "Nome do Chefe", ramalRegional: "0000")
     ]
 
-    private let columnSpacing: CGFloat = 32 // MAIS LARGO
+    private let columnSpacing: CGFloat = 32
 
     var body: some View {
-        ScrollView {
+
+        ScrollView(.vertical, showsIndicators: true) {   // <-- SCROLL RESTAURADO
             VStack(spacing: 40) {
 
                 VStack(spacing: 0) {
 
-                    // MARK: CABEÇALHO
+                    // MARK: - HEADER
                     headerRow
-                        .frame(height: 100) // HEADER MUITO MAIOR
+                        .frame(height: 100)
                         .padding(.horizontal, 16)
                         .background(Color.blue.opacity(0.18))
                         .overlay(
@@ -39,10 +40,10 @@ struct InfoRegionais: View {
 
                     Divider()
 
-                    // MARK: LINHAS
+                    // MARK: - LINHAS
                     ForEach(dadosRegionais.indices, id: \.self) { index in
                         rowView(dadosRegionais[index])
-                            .frame(height: 95) // ALTURA FIXA DAS LINHAS: GRANDE
+                            .frame(height: 95)  // Altura grande das linhas
 
                         if index < dadosRegionais.count - 1 {
                             Divider()
@@ -53,7 +54,7 @@ struct InfoRegionais: View {
                 .padding(.horizontal, 30)
                 .background(Color.white)
                 .clipShape(RoundedRectangle(cornerRadius: 25, style: .continuous))
-                .shadow(color: Color.black.opacity(0.10), radius: 12, x: 0, y: 5)
+                .shadow(color: Color.black.opacity(0.10), radius: 12, x: 0, y: 4)
             }
             .padding(.horizontal)
             .padding(.top)
@@ -79,16 +80,16 @@ struct InfoRegionais: View {
 
     private func headerCell(title: String, systemImage: String) -> some View {
         Label(title, systemImage: systemImage)
-            .font(.system(size: 26, weight: .bold)) // MUITO MAIOR
+            .font(.system(size: 26, weight: .bold))
             .foregroundStyle(.blue)
     }
 
-    // MARK: ROW
+    // MARK: ROWS
     private func rowView(_ info: RegionalInfo) -> some View {
         HStack(spacing: columnSpacing) {
 
             Text(info.regional)
-                .font(.system(size: 24, weight: .semibold)) // MAIOR
+                .font(.system(size: 24, weight: .semibold))
                 .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
