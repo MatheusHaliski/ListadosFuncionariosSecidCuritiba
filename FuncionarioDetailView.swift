@@ -1,4 +1,3 @@
-
 import SwiftUI
 internal import CoreData
 
@@ -7,9 +6,13 @@ struct FuncionarioDetailView: View {
     let onEdit: (() -> Void)?
 
     @Environment(\.managedObjectContext) private var viewContext
+    @Environment(\.openURL) private var openURL
+
+    private let contactService: ContactService = DefaultContactService.shared
 
     @State private var mostrandoEdicao = false
     @State private var isFavorite: Bool
+    @State private var mostrandoProjetos = false
 
     init(funcionario: Funcionario, onEdit: (() -> Void)? = nil) {
         self.funcionario = funcionario
@@ -50,6 +53,12 @@ struct FuncionarioDetailView: View {
                 }
                 .padding(.horizontal, 24)
 
+                Divider().padding(.horizontal, 32)
+
+                // MARK: - CONTACT GRID (CALLING BUTTONS)
+                contactGrid
+                    .padding(.horizontal, 12)
+
                 // MARK: - FAVORITE TOGGLE
                 favoriteToggle
                     .padding(.top, 12)
@@ -74,6 +83,7 @@ struct FuncionarioDetailView: View {
                 }
             }
         }
+
         .sheet(isPresented: $mostrandoEdicao) {
             NavigationStack {
                 FuncionarioFormView(
@@ -83,6 +93,11 @@ struct FuncionarioDetailView: View {
                 )
             }
         }
+
+        .sheet(isPresented: $mostrandoProjetos) {
+            ProjetosModalView(funcionario: funcionario)
+        }
+
         .onChange(of: funcionario.favorito) { newValue in
             isFavorite = newValue
         }
@@ -97,7 +112,7 @@ struct FuncionarioDetailView: View {
                     .resizable()
                     .scaledToFill()
             } else {
-                let name = (funcionario.nome ?? "")
+                let name = funcionario.nome ?? ""
                 let initials = name.split(separator: " ").prefix(2)
                     .map { String($0.prefix(1)).uppercased() }.joined()
 
@@ -113,6 +128,130 @@ struct FuncionarioDetailView: View {
             Circle().stroke(Color.blue.opacity(0.25), lineWidth: 3)
         )
         .shadow(color: Color.black.opacity(0.10), radius: 8, x: 0, y: 4)
+    }
+
+    // MARK: - CONTACT GRID
+    private var contactGrid: some View {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 72), spacing: 16)],
+            spacing: 16
+        ) {
+            ForEach(contactButtons, id: \.id) { btn in
+                Button(action: btn.action) {
+                    ZStack {
+                        Circle().fill(Color(.systemBackground))
+                        if btn.isSystem {
+                            Image(systemName: btn.icon)
+                                .resizable()
+                                .scaledToFit()
+                                .padding(12)
+                                .foregroundColor(btn.tint)
+                        } else if let ui = UIImage(named: btn.icon) {
+                            Image(uiImage: ui)
+                                .resizable()
+                                .scaledToFit()
+                                .padding(12)
+                        }
+                    }
+                    .frame(width: 64, height: 64)
+                    .padding(.horizontal,40)
+                    .overlay(Circle().stroke(Color.black.opacity(0.4), lineWidth: 1))
+                    .shadow(radius: 2)
+                }
+                .buttonStyle(.plain)
+            }
+
+            // ⭐ FAVORITO BUTTON
+            Button {
+                toggleFavorite(!isFavorite)
+            } label: {
+                ZStack {
+                    Circle().fill(Color(.systemBackground))
+                    Image(systemName: isFavorite ? "star.fill" : "star")
+                        .font(.system(size: 25, weight: .bold))
+                        .foregroundColor(isFavorite ? .yellow : .gray)
+                }
+                .frame(width: 64, height: 64)
+                .overlay(Circle().stroke(Color.black.opacity(0.4), lineWidth: 1))
+            }
+
+            // GREEN T (PROJETOS)
+            Button {
+                mostrandoProjetos = true
+            } label: {
+                ZStack {
+                    Circle().fill(Color.green)
+                    Text("T")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundColor(.white)
+                }
+                .frame(width: 64, height: 64)
+                .overlay(Circle().stroke(Color.black.opacity(0.4), lineWidth: 1))
+            }
+        }
+        .padding(.vertical, 8)
+    }
+
+    // MARK: - CONTACT BUTTON DEFINITIONS
+    private typealias ContactButton = (id: String, icon: String, isSystem: Bool, tint: Color, action: () -> Void)
+
+    private var contactButtons: [ContactButton] {
+        var buttons: [ContactButton] = []
+
+        if let phone = funcionario.celular, !phone.isEmpty {
+
+            // WhatsApp
+            let hasAsset = UIImage(named: "whatsapp") != nil
+            buttons.append((
+                "whatsapp",
+                hasAsset ? "whatsapp" : "message.circle.fill",
+                !hasAsset,
+                .green,
+                {
+                    _ = contactService.contact(.whatsapp,
+                                               for: EmployeeContact(name: funcionario.nome, email: funcionario.email, phone: phone),
+                                               openURL: { url in openURL(url); return true })
+                }
+            ))
+
+            // Phone call
+            buttons.append((
+                "call",
+                "phone.circle.fill",
+                true,
+                .blue,
+                {
+                    _ = contactService.contact(.call,
+                                               for: EmployeeContact(name: funcionario.nome, email: funcionario.email, phone: phone),
+                                               openURL: { url in openURL(url); return true })
+                }
+            ))
+        }
+
+        if let email = funcionario.email, !email.isEmpty {
+            buttons.append((
+                "email",
+                "envelope.circle.fill",
+                true,
+                .red,
+                {
+                    _ = contactService.contact(.email,
+                                               for: EmployeeContact(name: funcionario.nome, email: email, phone: funcionario.celular),
+                                               openURL: { url in openURL(url); return true })
+                }
+            ))
+        }
+
+        // Edit button
+        buttons.append((
+            "edit",
+            "pencil.circle.fill",
+            true,
+            .blue,
+            { mostrandoEdicao = true }
+        ))
+
+        return buttons
     }
 
     // MARK: - FAVORITE
@@ -133,7 +272,30 @@ struct FuncionarioDetailView: View {
         .padding(.horizontal, 32)
     }
 
-    // MARK: - BASIC INFO BOX
+    // MARK: - FAVORITE LOGIC
+    private func toggleFavorite(_ newValue: Bool) {
+        isFavorite = newValue
+        funcionario.favorito = newValue
+
+        do {
+            try viewContext.save()
+            NotificationCenter.default.post(name: .funcionarioAtualizado, object: nil)
+
+            FirestoreMigrator.uploadFuncionario(objectID: funcionario.objectID, context: viewContext) { result in
+                switch result {
+                case .success:
+                    print("[Detail] Favorito atualizado")
+                case .failure(let error):
+                    print("[Detail] Erro ao atualizar favorito: \(error.localizedDescription)")
+                }
+            }
+
+        } catch {
+            print("[Detail] Erro ao salvar favorito: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - INFO BOXES
     private func infoSection(title: String, value: String?) -> some View {
         Group {
             if let value, !value.isEmpty {
@@ -152,7 +314,6 @@ struct FuncionarioDetailView: View {
         }
     }
 
-    // MARK: - EMAIL BOX
     private var emailSection: some View {
         Group {
             if let email = funcionario.email, !email.isEmpty {
@@ -163,7 +324,7 @@ struct FuncionarioDetailView: View {
 
                     HStack {
                         Image(systemName: "envelope.fill")
-                            .foregroundStyle(.blue)
+                            .foregroundColor(.blue)
                         Text(email)
                             .font(.body.weight(.medium))
                             .foregroundStyle(.blue)
@@ -175,29 +336,6 @@ struct FuncionarioDetailView: View {
                 .background(Color(.systemGray6))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
             }
-        }
-    }
-
-    // MARK: - FAVORITE TOGGLE LOGIC
-    private func toggleFavorite(_ newValue: Bool) {
-        isFavorite = newValue
-        funcionario.favorito = newValue
-
-        do {
-            try viewContext.save()
-            NotificationCenter.default.post(name: .funcionarioAtualizado, object: nil)
-
-            FirestoreMigrator.uploadFuncionario(objectID: funcionario.objectID, context: viewContext) { result in
-                switch result {
-                case .success:
-                    print("[FuncionarioDetail] Favorito atualizado no Firestore")
-                case .failure(let error):
-                    print("[FuncionarioDetail] Erro ao atualizar favorito: \(error.localizedDescription)")
-                }
-            }
-
-        } catch {
-            print("[FuncionarioDetail] Erro ao salvar favorito: \(error.localizedDescription)")
         }
     }
 }
