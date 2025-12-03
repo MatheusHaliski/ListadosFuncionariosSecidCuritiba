@@ -146,8 +146,20 @@ struct FavoritesView: View {
                 funcionarioSelecionado = f
             } label: {
                 Image(systemName: "pencil")
-                    .foregroundStyle(.blue)
-                    .frame(width: 44, height: 56)
+                    .symbolRenderingMode(.hierarchical)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(12)
+                    .frame(width: 44, height: 44) // Control size
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color.blue)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(Color.blue.opacity(0.6), lineWidth: 0.5)
+                    )
+                    .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
             }
             .buttonStyle(.plain)
         }
@@ -237,20 +249,22 @@ struct PillSegmentedControl: View {
         }
         .padding(6)
         .background(
-            Capsule()
-                .fill(Color(.systemGray6).opacity(0.6))
+            Rectangle()
+                .fill(Color(.white).opacity(0.6))
         )
-        .frame(maxWidth: 380)
+        .frame(maxWidth: .infinity)
+        .frame(height:30)
     }
 
     // MARK: - Segment Button Builder
     private func segmentButton(_ seg: FavoritesView.Segment, title: String, count: Int) -> some View {
         ZStack {
             if selection == seg {
-                Capsule()
+                Rectangle()
                     .fill(Color.blue)
+                    .frame(height:120)
                     .matchedGeometryEffect(id: "SLIDE_PILL", in: animation)
-                    .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+                    .shadow(color: .black.opacity(0.35), radius: 0, y: 2)
             }
 
             HStack(spacing: 6) {
