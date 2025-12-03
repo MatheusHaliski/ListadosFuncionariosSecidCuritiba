@@ -8,6 +8,7 @@ struct RegionalInfo: Identifiable {
 }
 
 struct InfoRegionais: View {
+
     private let dadosRegionais: [RegionalInfo] = [
         RegionalInfo(regional: "Regional 1", chefe: "Nome do Chefe", ramalRegional: "0000"),
         RegionalInfo(regional: "Regional 2", chefe: "Nome do Chefe", ramalRegional: "0000"),
@@ -16,40 +17,55 @@ struct InfoRegionais: View {
         RegionalInfo(regional: "Regional 5", chefe: "Nome do Chefe", ramalRegional: "0000")
     ]
 
-    private let columnSpacing: CGFloat = 16
+    private let columnSpacing: CGFloat = 32 // MAIS LARGO
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 16) {
+            VStack(spacing: 40) {
+
                 VStack(spacing: 0) {
+
+                    // MARK: CABEÇALHO
                     headerRow
+                        .frame(height: 100) // HEADER MUITO MAIOR
+                        .padding(.horizontal, 16)
+                        .background(Color.blue.opacity(0.18))
+                        .overlay(
+                            Rectangle()
+                                .fill(Color.blue.opacity(0.35))
+                                .frame(height: 2),
+                            alignment: .bottom
+                        )
+
                     Divider()
 
+                    // MARK: LINHAS
                     ForEach(dadosRegionais.indices, id: \.self) { index in
                         rowView(dadosRegionais[index])
+                            .frame(height: 95) // ALTURA FIXA DAS LINHAS: GRANDE
 
                         if index < dadosRegionais.count - 1 {
                             Divider()
                         }
                     }
                 }
-                .padding(.vertical, 12)
-                .padding(.horizontal, 16)
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-                )
+                .padding(.vertical, 35)
+                .padding(.horizontal, 30)
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 25, style: .continuous))
+                .shadow(color: Color.black.opacity(0.10), radius: 12, x: 0, y: 5)
             }
-            .padding()
+            .padding(.horizontal)
+            .padding(.top)
         }
         .background(Color(.systemGroupedBackground))
         .navigationTitle("Informações Regionais")
     }
 
+    // MARK: HEADER
     private var headerRow: some View {
         HStack(spacing: columnSpacing) {
+
             headerCell(title: "Regional", systemImage: "building.2")
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -57,45 +73,43 @@ struct InfoRegionais: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             headerCell(title: "Ramal", systemImage: "phone.fill")
-                .frame(width: 120, alignment: .leading)
+                .frame(width: 180, alignment: .leading)
         }
-        .padding(.vertical, 4)
     }
 
     private func headerCell(title: String, systemImage: String) -> some View {
         Label(title, systemImage: systemImage)
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.primary)
+            .font(.system(size: 26, weight: .bold)) // MUITO MAIOR
+            .foregroundStyle(.blue)
     }
 
+    // MARK: ROW
     private func rowView(_ info: RegionalInfo) -> some View {
         HStack(spacing: columnSpacing) {
+
             Text(info.regional)
-                .font(.headline)
+                .font(.system(size: 24, weight: .semibold)) // MAIOR
                 .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .lineLimit(1)
-                .minimumScaleFactor(0.9)
 
             Text(info.chefe)
-                .font(.subheadline)
+                .font(.system(size: 22))
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .lineLimit(1)
-                .minimumScaleFactor(0.9)
 
             Text(info.ramalRegional)
-                .font(.subheadline)
+                .font(.system(size: 22))
                 .foregroundStyle(.secondary)
-                .frame(width: 120, alignment: .leading)
+                .frame(width: 180, alignment: .leading)
                 .monospacedDigit()
         }
-        .padding(.vertical, 8)
+        .padding(.horizontal, 10)
     }
 }
 
 #Preview {
     NavigationStack {
         InfoRegionais()
+            .preferredColorScheme(.light)
     }
 }
