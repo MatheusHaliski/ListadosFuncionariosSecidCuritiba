@@ -88,7 +88,11 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView([.vertical, .horizontal]) {
+            ScrollableOffsetView(
+                axes: [.vertical, .horizontal],
+                showsIndicators: true,
+                initialOffset: CGPoint(x: 600, y: 1000)
+            ) {
                 VStack {
                     VStack(spacing: 20) {
                         // 🔹 Cabeçalho com logo
@@ -184,7 +188,7 @@ struct HomeView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .appZoomScale(CGFloat(persistedZoom))
                 .scaleEffect(persistedZoom)
-                .animation(.easeInOut, value: persistedZoom) 
+                .animation(.easeInOut, value: persistedZoom)
             }
             .toolbar {
                 // 🔹 Botão "Sobre a SECID"

@@ -62,7 +62,11 @@ struct BuscarFuncionarioView: View {
     var body: some View {
         NavigationStack {
             // OUTER BOX: scrollable container with both axes + visible indicators
-            ScrollView([.vertical, .horizontal]) {
+            ScrollableOffsetView(
+                axes: [.vertical, .horizontal],
+                showsIndicators: true,
+                initialOffset: CGPoint(x: 600, y: 600)
+            ) {
                 ZStack {
                     // Outer visual box background
                     RoundedRectangle(cornerRadius: 16)
@@ -200,7 +204,6 @@ struct BuscarFuncionarioView: View {
                 // Minimum size so the box is visible; larger content will expand and scroll
                 .frame(minWidth: 2200, minHeight: 900)
             }
-            .scrollIndicators(.visible)
             .navigationTitle("Buscar Funcionário")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
