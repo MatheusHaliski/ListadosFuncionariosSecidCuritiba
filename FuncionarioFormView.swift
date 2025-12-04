@@ -34,7 +34,7 @@ struct FuncionarioFormView: View {
         self._funcionario = ObservedObject(initialValue: funcionario)
         self.isEditando = isEditando
         // Seed state from the provided object, falling back to the provided regional
-        _regionalText = State(initialValue: funcionario.regional ?? regional)
+        _regionalText = State(initialValue: (funcionario.regional?.isEmpty == false ? funcionario.regional! : regional))
         _nomeText = State(initialValue: funcionario.nome ?? "")
         _cargoText = State(initialValue: funcionario.funcao ?? "")
         _telefoneText = State(initialValue: funcionario.celular ?? "")

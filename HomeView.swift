@@ -74,10 +74,10 @@ extension View {
     }
 }
 
-// MARK: - HomeView
 struct HomeView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.appZoomScale) private var appZoom
+
     @State private var funcionario: Funcionario? = nil
     @State private var mostrandoFormulario = false
     @State private var mostrandoSobreSECID = false
@@ -88,13 +88,13 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollableOffsetView(
-                axes: [.vertical, .horizontal],
-                showsIndicators: true,
-                initialOffset: CGPoint(x: 600, y: 1000)
-            ) {
+
+            // 🔥 ENTIRE HOMEVIEW IS NOW ZOOMABLE + SCROLLABLE
+            ZoomableScrollView3(minZoomScale: 0.5, maxZoomScale: 3.0) {
+
                 VStack {
                     VStack(spacing: 20) {
+
                         // 🔹 Cabeçalho com logo
                         ZStack(alignment: .bottomLeading) {
                             LinearGradient(colors: [Color.white],
@@ -118,80 +118,79 @@ struct HomeView: View {
                             Text("Lista de Servidores do Estado do Paraná")
                                 .font(.title2.weight(.semibold))
                                 .multilineTextAlignment(.center)
-                                .foregroundColor(.primary)
-                                .padding(.horizontal)
                             Text("Encontre informação sobre funcionários e municípios")
                                 .font(.headline)
                                 .foregroundColor(.secondary)
                         }
 
-                        // 🔹 Botões principais
+                        // 🔹 Botão Adicionar Funcionário
                         Button(action: {
                             selectedRegional = ""
-                            let newFuncionario = Funcionario(context: viewContext)
-                            newFuncionario.nome = ""
-                            newFuncionario.funcao = ""
-                            newFuncionario.celular = ""
-                            newFuncionario.email = ""
-                            newFuncionario.favorito = false
-                            newFuncionario.ramal = ""
-                            newFuncionario.regional = ""
-                            self.funcionario = newFuncionario
+                            let f = Funcionario(context: viewContext)
+                            f.nome = ""
+                            f.funcao = ""
+                            f.celular = ""
+                            f.email = ""
+                            f.favorito = false
+                            f.ramal = ""
+                            f.regional = ""
+                            self.funcionario = f
                             mostrandoFormulario = true
                         }) {
                             HomeRow(icon: "person.badge.plus", color: .white, text: "Adicionar Funcionário")
                         }
                         .sheet(isPresented: $mostrandoFormulario) {
-                            if let funcionario = funcionario {
+                            if let f = funcionario {
                                 NavigationView {
                                     FuncionarioFormView(
                                         regional: selectedRegional,
-                                        funcionario: funcionario,
+                                        funcionario: f,
                                         isEditando: false
                                     )
                                     .environment(\.managedObjectContext, viewContext)
                                 }
                             } else {
-                                // Fallback in the unlikely case it's nil
-                                NavigationView {
-                                    Text("Erro ao criar funcionário.")
-                                        .padding()
-                                }
+                                Text("Erro ao criar funcionário.")
                             }
                         }
 
-                        NavigationLink(destination: BuscarFuncionarioView().appHeaderFooter()) {
+                        // 🔹 Buscar Servidor
+                        NavigationLink(destination: PaginaGrandeView().appHeaderFooter()) {
                             HomeRow(icon: "magnifyingglass.circle.fill", color: .blue, text: "Buscar Servidor")
                         }
 
+                        // 🔹 Favoritos
                         NavigationLink(destination: FavoritesView().appHeaderFooter().appBidirectionalScroll()) {
                             HomeRow(icon: "star.fill", color: .yellow, text: "Favoritos")
                         }
 
-                        NavigationLink(destination: MunicipiosView(context: viewContext).appHeaderFooter()) {
+                        // 🔹 Municípios
+                        NavigationLink(destination: PaginaGrandeMunicipiosView().appHeaderFooter()) {
                             HomeRow(icon: "map.fill", color: .orange, text: "Ver Municípios")
+                        }
+
+                        NavigationLink(destination: InfoRegionais().appHeaderFooter()) {
+                            HomeRow(icon: "building.2.fill", color: .teal, text: "Informações das Regionais")
                         }
 
                         Spacer(minLength: 20)
                     }
                     .frame(maxWidth: 700)
-                    .frame(maxWidth: .infinity)
                     .padding(.horizontal)
                 }
-                .padding(.bottom, 400)
-                .padding(.top, 1000)
-                .frame(width: 2500, height: 2500, alignment:.topTrailing )
+                .frame(minWidth: 2500, minHeight: 2500, alignment: .topLeading)
+                .padding(.top, 20)
+                .padding(.leading, 20)
 
-                .frame(maxWidth: .infinity, alignment: .center)
-                .background(Color(.systemGroupedBackground))
-                .navigationTitle("Regionais SECID")
-                .navigationBarTitleDisplayMode(.inline)
-                .appZoomScale(CGFloat(persistedZoom))
-                .scaleEffect(persistedZoom)
-                .animation(.easeInOut, value: persistedZoom)
             }
+
+            .navigationTitle("Regionais SECID")
+            .navigationBarTitleDisplayMode(.inline)
+            .appZoomScale(CGFloat(persistedZoom))
+            .scaleEffect(persistedZoom)
+            .animation(.easeInOut, value: persistedZoom)
+
             .toolbar {
-                // 🔹 Botão "Sobre a SECID"
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { mostrandoSobreSECID = true }) {
                         Label("Sobre a SECID", systemImage: "info.circle.fill")
@@ -204,7 +203,6 @@ struct HomeView: View {
                     }
                 }
 
-                // 🔹 Menu de tema
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
                         Picker("Theme", selection: Binding(
@@ -220,15 +218,15 @@ struct HomeView: View {
                         Label("Theme", systemImage: "moon.circle")
                     }
                 }
+
                 ToolbarItem(placement: .navigationBarTrailing) {
                     ZoomMenuButton(persistedZoom: $persistedZoom)
                 }
             }
         }
-        // 🔹 Garante que o zoom é herdado por toda a NavigationView
-        .appZoomScale(CGFloat(persistedZoom))
     }
 }
+
 
 // MARK: - HomeRow
 struct HomeRow: View {
@@ -282,4 +280,57 @@ struct HomeRow: View {
         .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 4)
     }
 }
+
+// MARK: - BASIC ZOOMABLE SCROLLVIEW
+struct ZoomableScrollView3<Content: View>: UIViewRepresentable {
+    var minZoomScale: CGFloat
+    var maxZoomScale: CGFloat
+    @ViewBuilder var content: () -> Content
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(host: UIHostingController(rootView: content()))
+    }
+
+    func makeUIView(context: Context) -> UIScrollView {
+        let scrollView = UIScrollView()
+        scrollView.minimumZoomScale = minZoomScale
+        scrollView.maximumZoomScale = maxZoomScale
+        scrollView.delegate = context.coordinator
+        scrollView.showsVerticalScrollIndicator = true
+        scrollView.showsHorizontalScrollIndicator = true
+        scrollView.bouncesZoom = true
+
+        let hostView = context.coordinator.host.view!
+        hostView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.addSubview(hostView)
+
+        NSLayoutConstraint.activate([
+            hostView.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
+            hostView.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
+            hostView.topAnchor.constraint(equalTo: scrollView.topAnchor),
+            hostView.bottomAnchor.constraint(equalTo: scrollView.bottomAnchor)
+        ])
+
+        return scrollView
+    }
+
+    func updateUIView(_ scrollView: UIScrollView, context: Context) {
+        // Agora, quando searchText/regionalSelecionada mudam,
+        // o SwiftUI recalcula `content()` e atualizamos o rootView:
+        context.coordinator.host.rootView = content()
+    }
+
+    class Coordinator: NSObject, UIScrollViewDelegate {
+        let host: UIHostingController<Content>
+
+        init(host: UIHostingController<Content>) {
+            self.host = host
+        }
+
+        func viewForZooming(in scrollView: UIScrollView) -> UIView? {
+            host.view
+        }
+    }
+}
+
 

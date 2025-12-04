@@ -13,7 +13,7 @@ struct MunicipiosView: View {
     @AppStorage("app_zoom_scale") private var persistedZoom: Double = 1.0
     
     @State private var mostrandoAnalytics = false
-    // Analytics inline data derived from current filter
+
     private var analyticsData: [MunicipiosPorRegional] {
         AnalyticsAggregator.aggregateMunicipiosByRegional(municipiosFiltrados)
     }
@@ -23,197 +23,167 @@ struct MunicipiosView: View {
         self.isFavoritesView = isFavoritesView
     }
     
-    // MARK: - Filtros
-    
+    // MARK: - Filters
     var municipiosFiltrados: [Municipio] {
-        let todos: [Municipio] = viewModel.municipios
-        let texto: String = filtroTexto
-        let regional: String = regionalSelecionada
+        let todos = viewModel.municipios
+        let texto = filtroTexto
+        let regional = regionalSelecionada
+        
+        if texto.isEmpty && regional.isEmpty { return todos }
 
-        if texto.isEmpty && regional.isEmpty {
-            return todos
-        }
-
-        return todos.filter { (municipio: Municipio) -> Bool in
-            let nomeDoMunicipio: String = municipio.nome ?? ""
-            let regionalDoMunicipio: String = municipio.regional ?? ""
-
-            let nomeMatch: Bool = texto.isEmpty || nomeDoMunicipio.localizedCaseInsensitiveContains(texto)
-            let regionalMatch: Bool = regional.isEmpty || (regionalDoMunicipio == regional)
-            return nomeMatch && regionalMatch
+        return todos.filter { municipio in
+            let nome = municipio.nome ?? ""
+            let reg = municipio.regional ?? ""
+            let nomeMatch = texto.isEmpty || nome.localizedCaseInsensitiveContains(texto)
+            let regMatch = regional.isEmpty || reg == regional
+            return nomeMatch && regMatch
         }
     }
     
     var regionais: [String] {
-        let municipios: [Municipio] = viewModel.municipios
-        var regionaisRaw: [String] = []
-        regionaisRaw.reserveCapacity(municipios.count)
-        for m in municipios {
-            if let r = m.regional, !r.isEmpty {
-                regionaisRaw.append(r)
-            }
-        }
-        let conjunto: Set<String> = Set<String>(regionaisRaw)
-        let lista: [String] = Array(conjunto)
-        let ordenada: [String] = lista.sorted { (a: String, b: String) -> Bool in
-            return a.localizedCaseInsensitiveCompare(b) == .orderedAscending
-        }
-        return ordenada
+        let raw = viewModel.municipios.compactMap { $0.regional }.filter { !$0.isEmpty }
+        return Array(Set(raw)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
     
-    // MARK: - Corpo
-    
+    // MARK: - Body
     var body: some View {
-        ScrollView([.vertical, .horizontal]) {
-            VStack {
-                if mostrandoBusca {
-                    filtrosView
-                }
+        NavigationStack {
+            
+            // 🔥 MUNICIPIOSVIEW AGORA É TOTALMENTE ZOOMÁVEL
+            ZoomableScrollView4(minZoomScale: 0.5, maxZoomScale: 3.0) {
                 
-                ScrollView([.vertical, .horizontal]) {
+                VStack(alignment: .leading, spacing: 20) {
+                    
+                    if mostrandoBusca {
+                        filtrosView
+                    }
+                    
                     listaMunicipiosView
                 }
+                // CANVAS GIGANTE: 5000 × 5000
+                .frame(minWidth: 5000, minHeight: 5000, alignment: .topLeading)
+                .padding(.top, 20)
+                .padding(.leading, 20)
             }
-            .frame(maxWidth: .infinity)
-        }
-        .navigationTitle("Municípios do Paraná")
-        .toolbar {
-            // 🔍 Lado esquerdo
-            ToolbarItem(placement: .topBarLeading) {
-                HStack {
-                    ZoomMenuButton(persistedZoom: $persistedZoom)
-                    
-                    Button(action: {
-                        withAnimation {
-                            mostrandoBusca.toggle()
-                            if !mostrandoBusca {
-                                filtroTexto = ""
-                                regionalSelecionada = ""
+            
+            .navigationTitle("Municípios do Paraná")
+            .toolbar {
+                
+                // 🔍 Busca + zoom botão (lado esquerdo)
+                ToolbarItem(placement: .topBarLeading) {
+                    HStack {
+                        ZoomMenuButton(persistedZoom: $persistedZoom)
+                        Button {
+                            withAnimation {
+                                mostrandoBusca.toggle()
+                                if !mostrandoBusca {
+                                    filtroTexto = ""
+                                    regionalSelecionada = ""
+                                }
                             }
+                        } label: {
+                            Image(systemName: mostrandoBusca ? "xmark.circle.fill" : "magnifyingglass")
+                                .foregroundColor(.blue)
                         }
-                    }) {
-                        Image(systemName: mostrandoBusca ? "xmark.circle.fill" : "magnifyingglass")
+                    }
+                }
+                
+                // 📊 Gráfico no centro da toolbar
+                ToolbarItem(placement: .principal) {
+                    Button {
+                        mostrandoAnalytics = true
+                    } label: {
+                        Image(systemName: "chart.bar.doc.horizontal")
+                            .font(.title3)
                             .foregroundColor(.blue)
                     }
-                    .accessibilityLabel(mostrandoBusca ? "Close filter" : "Filter cities")
                 }
             }
             
-            // 📊 <-- Botão do gráfico VISÍVEL no lado direito
-            ToolbarItem(placement: .principal) {
-                Button {
-                    mostrandoAnalytics = true
-                } label: {
-                    Image(systemName: "chart.bar.doc.horizontal")
-                        .font(.title3)
-                        .foregroundColor(.blue)
-                }
-                .accessibilityLabel("Mostrar gráfico")
+            .onAppear {
+                mostrandoBusca = true
+                viewModel.popularMunicipiosSeNecessario()
+                if isFavoritesView { persistedZoom = 0.25 }
             }
-        }
-        .onAppear {
-            mostrandoBusca = true
-            viewModel.popularMunicipiosSeNecessario()
-            if isFavoritesView {
-                // Force zoom to approximately 25% when entering Favorites
-                persistedZoom = 0.25
-            }
-        }
-        .onReceive(NotificationCenter.default
-            .publisher(for: .NSManagedObjectContextDidSave)
-            .receive(on: RunLoop.main)
-        ) { notification in
-            guard let userInfo = notification.userInfo else { return }
-            let inserted = (userInfo[NSInsertedObjectsKey] as? Set<NSManagedObject>) ?? []
-            let updated = (userInfo[NSUpdatedObjectsKey] as? Set<NSManagedObject>) ?? []
-            let changed = inserted.union(updated)
             
-            // Push Municipio changes immediately to Firestore
-            for obj in changed where obj is Municipio {
-                FirestoreMigrator.uploadMunicipio(objectID: obj.objectID, context: viewContext) { result in
-                    switch result {
-                    case .success:
-                        print("[Sync] Municipio uploaded after save: \(obj.objectID)")
-                    case .failure(let error):
-                        print("[Sync] Failed to upload Municipio: \(error.localizedDescription)")
+            .onReceive(NotificationCenter.default.publisher(
+                for: .NSManagedObjectContextDidSave)
+                .receive(on: RunLoop.main)
+            ) { notification in
+                guard let userInfo = notification.userInfo else { return }
+                
+                let inserted = userInfo[NSInsertedObjectsKey] as? Set<NSManagedObject> ?? []
+                let updated = userInfo[NSUpdatedObjectsKey] as? Set<NSManagedObject> ?? []
+                let changed = inserted.union(updated)
+                
+                for obj in changed where obj is Municipio {
+                    FirestoreMigrator.uploadMunicipio(objectID: obj.objectID, context: viewContext) { result in
+                        if case let .failure(error) = result {
+                            print("[Sync] Failed to upload Municipio: \(error.localizedDescription)")
+                        }
                     }
                 }
             }
-        }
-        .sheet(isPresented: $mostrandoAnalytics) {
-            MunicipiosAnalyticsView(
-                data: analyticsData,
-                title: "Municípios por Regional",
-                xValue: \.regional,
-                yValue: \.count
-            )
-            .presentationDetents([.fraction(0.5), .large])
-            .presentationDragIndicator(.visible)
-            .id(UUID())   // força reconstrução completa ao abrir
+            
+            .sheet(isPresented: $mostrandoAnalytics) {
+                MunicipiosAnalyticsView(
+                    data: analyticsData,
+                    title: "Municípios por Regional",
+                    xValue: \.regional,
+                    yValue: \.count
+                )
+                .presentationDetents([.fraction(0.5), .large])
+            }
         }
     }
-    
+
     // MARK: - Subviews
     
     private var filtrosView: some View {
-        VStack {
-            ScrollView([.vertical, .horizontal]) {
-                TextField("Filtrar por nome do município...", text: $filtroTexto)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .padding(8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.blue, lineWidth: 2)
-                    )
-                ScrollView([.vertical, .horizontal]) {
-                    Picker("Filtro regionais", selection: $regionalSelecionada) {
-                        Text("TODAS AS REGIONAIS").tag("")
-                        ForEach(regionais, id: \.self) { (regional: String) in
-                            Text(regional).tag(regional)
-                        }
-                    }
-                    .pickerStyle(.automatic)
-                }
+        VStack(spacing: 12) {
+            TextField("Filtrar por nome do município...", text: $filtroTexto)
+                .textFieldStyle(RoundedBorderTextFieldStyle())
+                .padding()
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(.blue, lineWidth: 2)
+                )
+            
+            Picker("Filtro regionais", selection: $regionalSelecionada) {
+                Text("TODAS AS REGIONAIS").tag("")
+                ForEach(regionais, id: \.self, content: Text.init)
             }
-            .padding()
-            .frame(maxWidth: 600)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color.blue, lineWidth: 2)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color(.systemBackground))
-                    )
-            )
-            .padding(.vertical, 8)
-        }}
+            .pickerStyle(.menu)
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(.blue, lineWidth: 2)
+                .background(
+                    RoundedRectangle(cornerRadius: 12).fill(.background)
+                )
+        )
+        .frame(maxWidth: 600)
+    }
+    
     
     private var listaMunicipiosView: some View {
         VStack(spacing: 0) {
-            // Cabeçalho
-            VStack(alignment: .center, spacing: 4) {
+            VStack {
                 Text("Municípios")
                     .font(.headline)
-                    .foregroundStyle(.primary)
-                    .multilineTextAlignment(.center)
                 Text("Regional do Paraná")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+                    .foregroundColor(.secondary)
             }
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.horizontal)
             .padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
             .background(Color(.secondarySystemBackground))
             
-            // Linhas
             VStack(spacing: 0) {
-                ForEach(municipiosFiltrados, id: \.objectID) { (municipio: Municipio) in
+                ForEach(municipiosFiltrados, id: \.objectID) { municipio in
                     NavigationLink(destination: MunicipioDetailView(municipio: municipio)) {
-                        MunicipioRow(
-                            municipio: municipio,
-                            viewContext: viewContext
-                        )
+                        MunicipioRow(municipio: municipio, viewContext: viewContext)
                     }
                     .buttonStyle(.plain)
                 }
@@ -222,17 +192,12 @@ struct MunicipiosView: View {
         .frame(maxWidth: 700)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.blue, lineWidth: 2)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(.systemBackground))
-                )
+                .stroke(.blue, lineWidth: 2)
+                .background(RoundedRectangle(cornerRadius: 12).fill(Color(.systemBackground)))
         )
-        .padding(.vertical, 8)
     }
-    
-    // MARK: - Lógica de favorito + Firestore
 }
+
 
 // MARK: - Linha
 
@@ -277,5 +242,54 @@ struct MunicipioRow: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.blue, lineWidth: 1)
         )
+    }
+}
+// MARK: - BASIC ZOOMABLE SCROLLVIEW
+struct ZoomableScrollView4<Content: View>: UIViewRepresentable {
+    var minZoomScale: CGFloat
+    var maxZoomScale: CGFloat
+    @ViewBuilder var content: () -> Content
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(host: UIHostingController(rootView: content()))
+    }
+
+    func makeUIView(context: Context) -> UIScrollView {
+        let scrollView = UIScrollView()
+        scrollView.minimumZoomScale = minZoomScale
+        scrollView.maximumZoomScale = maxZoomScale
+        scrollView.delegate = context.coordinator
+        scrollView.showsVerticalScrollIndicator = true
+        scrollView.showsHorizontalScrollIndicator = true
+        scrollView.bouncesZoom = true
+
+        let hostView = context.coordinator.host.view!
+        hostView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.addSubview(hostView)
+
+        NSLayoutConstraint.activate([
+            hostView.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
+            hostView.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
+            hostView.topAnchor.constraint(equalTo: scrollView.topAnchor),
+            hostView.bottomAnchor.constraint(equalTo: scrollView.bottomAnchor)
+        ])
+
+        return scrollView
+    }
+
+    func updateUIView(_ scrollView: UIScrollView, context: Context) {
+        context.coordinator.host.rootView = content()
+    }
+
+    class Coordinator: NSObject, UIScrollViewDelegate {
+        let host: UIHostingController<Content>
+
+        init(host: UIHostingController<Content>) {
+            self.host = host
+        }
+
+        func viewForZooming(in scrollView: UIScrollView) -> UIView? {
+            host.view
+        }
     }
 }

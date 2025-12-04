@@ -5,29 +5,14 @@ struct ZoomableScrollView<Content: View>: UIViewRepresentable {
     var minZoomScale: CGFloat = 1.0
     var maxZoomScale: CGFloat = 3.0
     var onZoom: ((CGFloat) -> Void)?
-    var scale: Binding<CGFloat>?
     @ViewBuilder var content: () -> Content
-
-    init(
-        minZoomScale: CGFloat = 1.0,
-        maxZoomScale: CGFloat = 3.0,
-        scale: Binding<CGFloat>? = nil,
-        onZoom: ((CGFloat) -> Void)? = nil,
-        @ViewBuilder content: @escaping () -> Content
-    ) {
-        self.minZoomScale = minZoomScale
-        self.maxZoomScale = maxZoomScale
-        self.scale = scale
-        self.onZoom = onZoom
-        self.content = content
-    }
 
     func makeUIView(context: Context) -> UIScrollView {
         let scrollView = UIScrollView()
         scrollView.delegate = context.coordinator
         scrollView.minimumZoomScale = minZoomScale
         scrollView.maximumZoomScale = maxZoomScale
-        scrollView.zoomScale = scale?.wrappedValue ?? 1.0
+        scrollView.zoomScale = 1.0
         scrollView.bouncesZoom = true
         scrollView.showsVerticalScrollIndicator = false
         scrollView.showsHorizontalScrollIndicator = false
@@ -76,11 +61,6 @@ struct ZoomableScrollView<Content: View>: UIViewRepresentable {
                 context.coordinator.widthConstraint?.isActive = true
             }
         }
-
-        if let targetScale = scale?.wrappedValue, abs(targetScale - uiView.zoomScale) > 0.001 {
-            uiView.setZoomScale(targetScale, animated: false)
-        }
-
         centerContent(in: uiView)
     }
 
@@ -112,9 +92,6 @@ struct ZoomableScrollView<Content: View>: UIViewRepresentable {
 
         func scrollViewDidZoom(_ scrollView: UIScrollView) {
             parent.onZoom?(scrollView.zoomScale)
-            if let scale = parent.scale, abs(scale.wrappedValue - scrollView.zoomScale) > 0.001 {
-                scale.wrappedValue = scrollView.zoomScale
-            }
             // Recenter content after zooming
             let offsetX = max((scrollView.bounds.size.width - scrollView.contentSize.width) * 0.5, 0)
             let offsetY = max((scrollView.bounds.size.height - scrollView.contentSize.height) * 0.5, 0)
