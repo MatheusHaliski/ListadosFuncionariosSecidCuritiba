@@ -18,6 +18,7 @@ struct PaginaGrandeView: View {
     @State private var searchText: String = ""
     @State private var regionalSelecionada: String = ""
     @State private var zoom: CGFloat = 1.0
+    @State private var didSyncFromFirestore = false
 
     // MARK: - REGION LIST
     private var todasRegionais: [String] {
@@ -60,6 +61,12 @@ struct PaginaGrandeView: View {
                 content
             }
             .navigationTitle("Pesquisa Avançada")
+        }
+        .task(id: "firestoreSyncOnce") {
+            guard !didSyncFromFirestore else { return }
+            didSyncFromFirestore = true
+            let syncContext = PersistenceController.shared.makeBackgroundContext()
+            FirestoreMigrator.syncFromFirestoreToCoreData(context: syncContext) { _ in }
         }
     }
 

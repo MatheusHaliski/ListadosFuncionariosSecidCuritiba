@@ -116,7 +116,8 @@ struct FavoritesView: View {
         .task {
             if !didSyncFromFirestore {
                 didSyncFromFirestore = true
-                FirestoreMigrator.syncFromFirestoreToCoreData(context: viewContext) { _ in }
+                let syncContext = PersistenceController.shared.makeBackgroundContext()
+                FirestoreMigrator.syncFromFirestoreToCoreData(context: syncContext) { _ in }
             }
         }
     }
