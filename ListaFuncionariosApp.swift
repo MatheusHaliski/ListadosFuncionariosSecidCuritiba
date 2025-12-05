@@ -42,16 +42,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         #else
         print("[AppCheck] FirebaseAppCheck not available; skipping AppCheck debug setup.")
         #endif
-
-        // Optional debug reset controlled by an env var to avoid wiping data on every
-        // Xcode launch. Enable by setting ENABLE_DEBUG_DATA_RESET=1 in the scheme.
-        let shouldRunDebugReset = ProcessInfo.processInfo.environment["ENABLE_DEBUG_DATA_RESET"] == "1"
-        if shouldRunDebugReset {
-            funcionarioViewModel.resetToDefaultMode()
-            AppDataResetter.resetForXcodeBuildIfNeeded(context: context)
-        } else {
-            print("[Launch] Debug data reset skipped (ENABLE_DEBUG_DATA_RESET not set).")
-        }
+        // Agora você consegue chamar isto SEM CRASH:
+        funcionarioViewModel.resetToDefaultMode()
+        print("[Launch] resetToDefaultMode() executed")
         #endif
         // -----------------------------------------------------------
 
@@ -66,6 +59,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         #else
         print("[Firebase] FirebaseCore not available; skipping FirebaseApp.configure().")
         #endif
+        AppDataResetter.resetForXcodeBuildIfNeeded(context: context)
         return true
     }
 }
@@ -107,6 +101,45 @@ struct ListaFuncionariosApp: App {
             .task {
                 // Ensure file protection is applied as a side-effect during app launch
                 SecurityConfigurator.applyFileProtection()
+                let context = persistenceController.container.viewContext
+
+                // If running from Xcode (debug/dev), wipe Firestore employees and local Core Data to avoid duplicates between runs
+                #if DEBUG
+                if isRunningFromXcode() {
+                    #if canImport(FirebaseCore)
+                    if FirebaseApp.app() == nil {
+                        if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
+                            FirebaseApp.configure()
+                        }
+                    }
+                    if FirebaseApp.app() != nil {
+                        do {
+                            await FirestoreMigrator.wipeFuncionariosInFirestore()
+                            let context = persistenceController.container.viewContext
+                            let migratedCount = try await FirestoreMigrator.migrateFuncionariosToFirestoreAsync(from: context)
+                            print("[Wipe] Migrated funcionarios to Firestore (debug run). Count: \(migratedCount)")
+                        } catch {
+                            print("[Wipe] Error during Firestore wipe/migrate: \(error)")
+                        }
+                    } else {
+                        print("[Wipe] Skipping Firestore wipe: Firebase not configured.")
+                    }
+                    #else
+                    print("[Wipe] FirebaseCore not available; skipping Firestore wipe.")
+                    #endif
+
+                    // Also wipe local Core Data funcionarios
+                    let fetch = NSFetchRequest<NSFetchRequestResult>(entityName: "Funcionario")
+                    let deleteReq = NSBatchDeleteRequest(fetchRequest: fetch)
+                    do {
+                        try context.execute(deleteReq)
+                        try context.save()
+                        print("[Wipe] Local Core Data funcionarios wiped.")
+                    } catch {
+                        print("[Wipe] Failed to wipe local Core Data funcionarios: \(error)")
+                    }
+                }
+                #endif
 
                 // One-time automatic migration guard using UserDefaults
                 let didMigrateKey = "didMigrateFuncionariosToFirestore"
@@ -133,6 +166,25 @@ struct ListaFuncionariosApp: App {
                 #else
                 print("[Migration] FirebaseCore not available; skipping auto-migration.")
                 #endif
+
+                // After ensuring Firebase is configured, sync Firestore -> Core Data so UI reflects latest remote data on launch
+                #if canImport(FirebaseCore)
+                if FirebaseApp.app() != nil {
+                    let context = persistenceController.container.viewContext
+                    FirestoreMigrator.syncFromFirestoreToCoreData(context: context) { result in
+                        switch result {
+                        case .success(let updated):
+                            print("[Sync] Firestore -> Core Data completed. Updated/created employees: \(updated)")
+                        case .failure(let error):
+                            print("[Sync] Firestore -> Core Data failed: \(error.localizedDescription)")
+                        }
+                    }
+                } else {
+                    print("[Sync] Skipping Firestore -> Core Data: Firebase not configured.")
+                }
+                #else
+                print("[Sync] FirebaseCore not available; skipping Firestore -> Core Data sync.")
+                #endif
             }
             .environment(\.managedObjectContext, persistenceController.container.viewContext)
             .environmentObject(funcionarioVM)
@@ -142,4 +194,3 @@ struct ListaFuncionariosApp: App {
         }
     }
 }
-

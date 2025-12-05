@@ -1,3 +1,10 @@
+//
+//  PaginaGrandeInfoView.swift
+//  ListaFuncionariosApp
+//
+//  Created by Matheus Braschi Haliski on 04/12/25.
+//
+
 import SwiftUI
 internal import CoreData
 #if os(iOS)
@@ -5,45 +12,48 @@ import UIKit
 #endif
 
 // MARK: - MAIN VIEW
-struct PaginaGrandeView: View {
-    
+struct PaginaGrandeInfoView: View {
+
+
     @Environment(\.managedObjectContext) private var context
 
     @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \Funcionario.nome, ascending: true)],
+        sortDescriptors: [NSSortDescriptor(keyPath: \RegionalInfo5.nome, ascending: true)],
         animation: .default
-    ) private var funcionarios: FetchedResults<Funcionario>
+    ) private var regionalinfo: FetchedResults<RegionalInfo5>
 
     // MARK: - FILTER STATES
     @State private var searchText: String = ""
     @State private var regionalSelecionada: String = ""
     @State private var zoom: CGFloat = 1.0
+    @State private var refreshToken = UUID()
     @State private var showPurgeConfirmation = false
-   
+
     // MARK: - REGION LIST
     private var todasRegionais: [String] {
         var set: Set<String> = []
-        funcionarios.forEach { f in
-            if let r = f.regional?.trimmingCharacters(in: .whitespacesAndNewlines),
+        regionalinfo.forEach { f in
+            if let r = (f.value(forKey: "nome") as? String)?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
                !r.isEmpty {
                 set.insert(r)
             }
         }
         return set.sorted()
     }
+
     // MARK: - FILTERED LIST
-    private var filteredFuncionarios: [Funcionario] {
-        funcionarios.filter { f in
-            let nome = f.nome ?? ""
-            let funcao = f.funcao ?? ""
-            let regionalBruta = f.regional ?? ""
-            let regionalTrim = regionalBruta.trimmingCharacters(in: .whitespacesAndNewlines)
+    private var filteredRegionalInfo: [NSManagedObject] {
+        regionalinfo.filter { f in
+            let nome = (f.value(forKey: "nome") as? String) ?? ""
+            let chefe = (f.value(forKey: "chefe") as? String) ?? ""
+            let ramal = (f.value(forKey: "ramal") as? String) ?? ""
+            let regionalTrim = nome.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
 
             let matchesSearch =
                 searchText.isEmpty ||
                 nome.localizedCaseInsensitiveContains(searchText) ||
-                funcao.localizedCaseInsensitiveContains(searchText) ||
-                regionalBruta.localizedCaseInsensitiveContains(searchText)
+                chefe.localizedCaseInsensitiveContains(searchText) ||
+                ramal.localizedCaseInsensitiveContains(searchText)
 
             let matchesRegion =
                 regionalSelecionada.isEmpty ||
@@ -53,39 +63,21 @@ struct PaginaGrandeView: View {
         }
     }
 
-    // MARK: - DELETE HELPERS
-    private func deleteFuncionario(_ funcionario: Funcionario) {
-        deleteFromFirebase(entity: "Funcionario", id: funcionario.objectID.uriRepresentation().absoluteString)
-        context.delete(funcionario)
-        do { try context.save() } catch { print("Erro ao salvar após deletar Funcionário: \(error)") }
-    }
-
-    private func deleteFromFirebase(entity: String, id: String) {
-        // TODO: Integrate with your Firebase layer. Example:
-        // Firestore.firestore().collection(entity).document(id).delete { error in ... }
-        print("[Firebase] Deleting \(entity) with id: \(id)")
-    }
-
-#if DEBUG
-    private func purgeAllRegionais() {
-        let fetch = NSFetchRequest<NSFetchRequestResult>(entityName: "RegionalInfo5")
-        let batchDelete = NSBatchDeleteRequest(fetchRequest: fetch)
-        do {
-            try context.execute(batchDelete)
-            try context.save()
-        } catch {
-            print("[PaginaGrandeView] Erro ao apagar todas as regionais: \(error.localizedDescription)")
-        }
-    }
-#endif
-
     var body: some View {
         NavigationStack {
             // MASSIVE ZOOMABLE SCROLLVIEW
-            ZoomableScrollView22(minZoomScale: 0.5, maxZoomScale: 3.0) {
+            ZoomableScrollView02(minZoomScale: 0.5, maxZoomScale: 3.0) {
                 content
             }
-            .navigationTitle("Pesquisa de Funcionários")
+            .id(refreshToken)
+            .navigationTitle("Pesquisa Avançada")
+            .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextDidSave, object: context)) { notification in
+                context.mergeChanges(fromContextDidSave: notification)
+                refreshToken = UUID()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextObjectsDidChange, object: context)) { _ in
+                refreshToken = UUID()
+            }
 #if DEBUG
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -103,27 +95,16 @@ struct PaginaGrandeView: View {
                 titleVisibility: .visible
             ) {
                 Button("Apagar Todas", role: .destructive) {
-                    purgeAllFuncionarios()
+                    purgeAllRegionais()
                 }
                 Button("Cancelar", role: .cancel) { }
             } message: {
-                Text("Esta ação removerá todas as entradas de Funcionarios do banco de dados.")
+                Text("Esta ação removerá todas as entradas de RegionalInfo5 do banco de dados.")
             }
 #endif
         }
     }
-    public func purgeAllFuncionarios() {
-        let fetch = NSFetchRequest<NSFetchRequestResult>(entityName: "Funcionario")
-        let batchDelete = NSBatchDeleteRequest(fetchRequest: fetch)
-        do {
-            // Optional: mirror deletion in Firebase if desired
-            print("[Firebase] Deleting entire Funcionarios collection (implement real call if needed)")
-            try context.execute(batchDelete)
-            try context.save()
-        } catch {
-            print("[PaginaGrandeView] Erro ao apagar todos os Funcionarios: \(error.localizedDescription)")
-        }
-    }
+
     // MARK: - MAIN CONTENT (FILTER + TABLE)
     private var content: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -192,8 +173,8 @@ struct PaginaGrandeView: View {
             // ---------------------- TABLE + SCROLL ----------------------
             ScrollView(showsIndicators: true) {
                 LazyVStack(spacing: 0) {
-                    ForEach(filteredFuncionarios, id: \.objectID) { funcionario in
-                        CardRowSimple04(funcionario: funcionario, zoom: zoom)
+                    ForEach(filteredRegionalInfo, id: \.objectID) { item in
+                        CardRowSimple2(regionalinfo: item, zoom: zoom)
                     }
                 }
                 .padding(.vertical, 8)
@@ -208,52 +189,63 @@ struct PaginaGrandeView: View {
         .frame(minWidth: 5000, minHeight: 5000, alignment: .topLeading)
         .background(Color(.systemGray6))
     }
+    // MARK: - DELETE HELPERS
+    private func deleteRegionalInfo(_ regional: RegionalInfo5) {
+        // Core Data deletion
+        context.delete(regional)
+        do { try context.save() } catch { print("Erro ao salvar após deletar Funcionário: \(error)") }
+    }
+#if DEBUG
+    private func purgeAllRegionais() {
+        let fetch = NSFetchRequest<NSFetchRequestResult>(entityName: "RegionalInfo5")
+        let batchDelete = NSBatchDeleteRequest(fetchRequest: fetch)
+        batchDelete.resultType = .resultTypeObjectIDs
+        do {
+            let result = try context.execute(batchDelete) as? NSBatchDeleteResult
+            if let objectIDs = result?.result as? [NSManagedObjectID] {
+                let changes: [AnyHashable: Any] = [NSDeletedObjectsKey: objectIDs]
+                NSManagedObjectContext.mergeChanges(fromRemoteContextSave: changes, into: [context])
+            }
+            try context.save()
+            context.reset()
+            refreshToken = UUID()
+        } catch {
+            print("[PaginaGrandeInfoView] Erro ao apagar todas as regionais: \(error)")
+        }
+    }
+#endif
 }
 // MARK: - SIMPLE CARD ROW (standalone)
-struct CardRowSimple04: View {
-    @ObservedObject var funcionario: Funcionario
+struct CardRowSimple2: View {
+    let regionalinfo: NSManagedObject
     let zoom: CGFloat
 
-    private var profileImage: some View {
-        ZStack {
-            if let data = funcionario.imagem,
-               let uiImage = UIImage(data: data) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                Circle().fill(Color(.systemGray5))
-                Text(String(funcionario.nome?.first ?? "F"))
-                    .font(.system(size: 22 * zoom))
-                    .foregroundColor(.primary)
-            }
-        }
-        .clipShape(Circle())
-    }
-
     var body: some View {
+        let nome = (regionalinfo.value(forKey: "nome") as? String) ?? "Sem Nome"
+        let chefe = (regionalinfo.value(forKey: "chefe") as? String) ?? ""
+        let ramal = (regionalinfo.value(forKey: "ramal") as? String) ?? ""
+
         HStack(spacing: 16) {
 
-            
+
             // CARD CONTENT
-            NavigationLink(destination: FuncionarioDetailView(funcionario: funcionario)) {
+            NavigationLink(destination: { if let regional = regionalinfo as? RegionalInfo5 { RegionalInfoDetailView(regional: regional) } else { Text("Detalhes indisponíveis") } }) {
                 Circle()
-                    .fill(Color.blue.opacity(0.15))
+                    .fill(Color.blue.opacity(0.2))
                     .frame(width: 55 * zoom, height: 55 * zoom)
                     .overlay(
-                        profileImage
-                            .frame(width: 55 * zoom, height: 55 * zoom)
+                        Text(String(nome.first ?? "F"))
+                            .font(.system(size: 22 * zoom))
                     )
-
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(funcionario.nome ?? "Sem Nome")
+                    Text("Nome da Regional: \(nome)")
                         .font(.system(size: 18 * zoom, weight: .semibold))
 
-                    Text(funcionario.funcao ?? "")
+                    Text("Chefe (Atual): \(chefe)")
                         .font(.system(size: 14 * zoom))
                         .foregroundColor(.secondary)
 
-                    Text(funcionario.regional ?? "")
+                    Text("Ramal da Regional: \(ramal)")
                         .font(.system(size: 14 * zoom))
                         .foregroundColor(.blue)
                 }
@@ -275,8 +267,9 @@ struct CardRowSimple04: View {
 }
 
 
+
 // MARK: - BASIC ZOOMABLE SCROLLVIEW
-struct ZoomableScrollView22<Content: View>: UIViewRepresentable {
+struct ZoomableScrollView02<Content: View>: UIViewRepresentable {
     var minZoomScale: CGFloat
     var maxZoomScale: CGFloat
     @ViewBuilder var content: () -> Content
@@ -326,3 +319,4 @@ struct ZoomableScrollView22<Content: View>: UIViewRepresentable {
         }
     }
 }
+

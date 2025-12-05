@@ -160,7 +160,7 @@ struct HomeView: View {
                         }
 
                         // 🔹 Favoritos
-                        NavigationLink(destination: FavoritesView().appHeaderFooter().appBidirectionalScroll()) {
+                        NavigationLink(destination: PaginaGrandeView2().appHeaderFooter()) {
                             HomeRow(icon: "star.fill", color: .yellow, text: "Favoritos")
                         }
 
@@ -169,7 +169,7 @@ struct HomeView: View {
                             HomeRow(icon: "map.fill", color: .orange, text: "Ver Municípios")
                         }
 
-                        NavigationLink(destination: InfoRegionais().appHeaderFooter()) {
+                        NavigationLink(destination: PaginaGrandeInfoView().appHeaderFooter()) {
                             HomeRow(icon: "building.2.fill", color: .teal, text: "Informações das Regionais")
                         }
 

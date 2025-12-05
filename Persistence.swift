@@ -80,25 +80,6 @@ struct PersistenceController {
 
         // Assign to the stored property only after configuration
         self.container = container
-        configure(context: self.container.viewContext)
-    }
-
-    /// Applies a consistent merge policy and merge behavior to any context we use.
-    ///
-    /// Using `.mergeByPropertyObjectTrump` helps prevent "Could not merge changes" errors
-    /// when background syncs (Firestore) race with on-screen edits. We also enable
-    /// `automaticallyMergesChangesFromParent` so the view context refreshes when a sibling
-    /// context saves to the persistent store coordinator.
-    private func configure(context: NSManagedObjectContext) {
-        context.automaticallyMergesChangesFromParent = true
-        context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
-        context.name = context === container.viewContext ? "viewContext" : "backgroundContext"
-    }
-
-    /// Creates a background context with the same merge configuration as the view context.
-    func makeBackgroundContext() -> NSManagedObjectContext {
-        let backgroundContext = container.newBackgroundContext()
-        configure(context: backgroundContext)
-        return backgroundContext
+        self.container.viewContext.automaticallyMergesChangesFromParent = true
     }
 }

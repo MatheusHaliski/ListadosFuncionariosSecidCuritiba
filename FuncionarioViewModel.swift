@@ -83,13 +83,14 @@ final class FuncionarioViewModel: ObservableObject {
     }
 
     /// Resets all funcionarios to default mode, preserving only `nome` and `regional`.
-    /// Other fields (funcao, ramal, celular, email) are cleared.
+    /// Other fields (funcao, ramal, celular, email, imagemURL, imagem) are cleared.
+    /// Also mirrors the reset in Firestore for collection "employees".
     func resetToDefaultMode() {
         let request: NSFetchRequest<Funcionario> = Funcionario.fetchRequest()
         do {
             let all = try context.fetch(request)
+            // 1) Core Data reset
             for funcionario in all {
-                // Preserve nome and regional; clear the rest
                 funcionario.funcao = ""
                 funcionario.ramal = ""
                 funcionario.celular = ""
@@ -99,6 +100,58 @@ final class FuncionarioViewModel: ObservableObject {
             }
             try context.save()
             fetchFuncionarios()
+
+            // 2) Firestore reset (best-effort, async)
+            Task {
+                let db = Firestore.firestore()
+                let collection = db.collection("employees")
+                let batch = db.batch()
+
+                // We'll try to match documents by a stable identifier when available.
+                // Prefer Core Data UUID `id` field when present, otherwise fall back to name match.
+                // If falling back to name, multiple docs can match; we will update all with that name.
+                // Note: Adjust field keys here if your Firestore schema differs.
+
+                do {
+                    // Preload all employee docs if we need name-based fallback
+                    let snapshot = try await collection.getDocuments()
+
+                    for funcionario in all {
+                        let cleared: [String: Any] = [
+                            "funcao": "",
+                            "ramal": "",
+                            "celular": "",
+                            "email": "",
+                            "imagemURL": NSNull(),
+                            "imagem": NSNull()
+                        ]
+
+                        if let uuid = funcionario.id?.uuidString, !uuid.isEmpty {
+                            // Use document with id == uuid if it exists, otherwise create/merge
+                            let docRef = collection.document(uuid)
+                            batch.setData(cleared, forDocument: docRef, merge: true)
+                        } else {
+                            // Fallback by name: update all docs whose `nome` equals this funcionario name
+                            let nome = (funcionario.nome ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard !nome.isEmpty else { continue }
+
+                            let matching = snapshot.documents.filter { doc in
+                                let docName = (doc.data()["nome"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                                return docName == nome
+                            }
+                            for doc in matching {
+                                batch.setData(cleared, forDocument: doc.reference, merge: true)
+                            }
+                        }
+                    }
+
+                    try await batch.commit()
+                    print("✅ Firestore employees reset to default mode to mirror Core Data.")
+                } catch {
+                    print("❌ Failed to mirror reset in Firestore: \(error)")
+                }
+            }
+
             print("✅ All funcionarios reset to default mode (only nome and regional preserved).")
         } catch {
             print("❌ Failed to reset funcionarios to default mode: \(error)")
@@ -112,7 +165,7 @@ final class FuncionarioViewModel: ObservableObject {
 /// for each unique name and deletes the rest.
 func removeDuplicateEmployeesByName() async {
     let db = Firestore.firestore()
-    let collection = db.collection("funcionarios")
+    let collection = db.collection("employees")
 
     do {
         let snapshot = try await collection.getDocuments()
@@ -167,6 +220,7 @@ extension FuncionarioViewModel {
         popularNucleoCampoMourao(context: context)
         popularNucleoGuarapuava(context: context)
         popularNucleoUmuarama(context: context)
+        popularRegionaisInfo(context: context)
     }
 
     // MARK: - CURITIBA
@@ -379,4 +433,135 @@ extension FuncionarioViewModel {
         }
     }
 }
+// MARK: - POPULAR REGIONALINFO5 (INFORMAÇÕES DAS REGIONAIS)
+extension FuncionarioViewModel {
 
+    func popularRegionaisInfo(context: NSManagedObjectContext) {
+
+        let request = NSFetchRequest<NSFetchRequestResult>(entityName: "RegionalInfo5")
+
+        print("🔹 Populando tabela RegionalInfo5 com endereço, chefe e ramal...")
+        // NOVA ESTRUTURA COMPLETA
+        let valores1: [(String, String, String, String)] = [
+            (
+                "Curitiba",
+                "ENG. CIVIL CINTHIA APARECIDA DE LIMA",
+                "41 3210-2938",
+                """
+                Rua Jacy Loureiro de Campos, nº 6, 2º andar,
+                Praça Nossa Senhora de Santa Salete – Palácio das Araucárias,
+                CEP 82590-300 – Curitiba-PR
+                """
+            ),
+            (
+                "Ponta Grossa",
+                "ENG. CIVIL JOAO ALFREDO THOME",
+                "42 99144-7400",
+                """
+                Rua José do Patrocínio, 238B – CEP 84040-200,
+                Ponta Grossa-PR
+                """
+            ),
+            (
+                "União da Vitória",
+                "ADV. NELSON RONALDO PEDROSO",
+                "42 99955-8564",
+                """
+                Avenida Bento Munhoz da Rocha Neto 1251,
+                Bairro São Bernardo do Campo – CEP 84600-348,
+                União da Vitória-PR
+                """
+            ),
+            (
+                "Londrina",
+                "ENG. CIVIL FABIO BAHL OLIVEIRA",
+                "(41) 98846-2339",
+                """
+                Rua Cambará, 207 – CEP 86010-530,
+                Londrina-PR
+                """
+            ),
+            (
+                "Santo Antônio da Platina",
+                "ENG. CIVIL JOÃO VITOR DE OLIVEIRA NABARRO",
+                "41 98846-2696",
+                """
+                Rua Marechal Deodoro da Fonseca, 185 – Centro,
+                CEP 86430-000 – Santo Antônio da Platina-PR
+                """
+            ),
+            (
+                "Cascavel",
+                "ARQUITETO RICARDO CEOLA",
+                "45 3223-2081",
+                """
+                Rua Antonina, 2406 – Centro – CEP 85812-040,
+                Cascavel-PR
+                """
+            ),
+            (
+                "Maringá",
+                "ENG. CIVIL GUSTAVO VIDOR GODOI",
+                "44 99948-5647",
+                """
+                Avenida Humaitá 268 – Zona 4 – CEP 87014-200,
+                Maringá-PR
+                """
+            ),
+            (
+                "Pato Branco",
+                "ENG. CIVIL JOCEANDRO TONIAL",
+                "46 3220-7220",
+                """
+                Rua Sete de Setembro, 363 – CEP 85506-040,
+                Pato Branco-PR
+                """
+            ),
+            (
+                "Campo Mourão",
+                "ENG. CIVIL FERNANDO CAVALI ALMEIDA",
+                "44 99846-7698",
+                """
+                Avenida Capitão Índio Bandeira, 920, 2º andar,
+                Prédio da PGE (anexo à Agência de Rendas) – Centro,
+                CEP 87300-005 – Campo Mourão-PR
+                """
+            ),
+            (
+                "Guarapuava",
+                "ENG. CIVIL JOSE LUIZ CIESLACK",
+                "42 3621-7316",
+                """
+                Rua Cônego Braga, 25 – Centro – CEP 85010-050,
+                Guarapuava-PR
+                """
+            ),
+            (
+                "Umuarama",
+                "ENG. CIVIL VIVIANNE MENDES LOWE",
+                "44 99936-9211",
+                """
+                Rua Walter Kraiser, 3055 – CEP 87503-660,
+                Umuarama-PR
+                """
+            )
+        ]
+
+        // INSERÇÃO NO CORE DATA
+        for (nome, chefe, ramal, endereco) in valores1 {
+            let obj = NSEntityDescription.insertNewObject(forEntityName: "RegionalInfo5", into: context)
+            obj.setValue(nome, forKey: "nome")
+            obj.setValue(chefe, forKey: "chefe")
+            obj.setValue(ramal, forKey: "ramal")
+            obj.setValue(endereco, forKey: "endereco")
+        }
+
+        do {
+            try context.save()
+            print("✅ RegionalInfo5 populado com sucesso com endereço completo!")
+        } catch {
+            print("❌ Erro ao salvar RegionalInfo5: \(error.localizedDescription)")
+        }
+    }
+
+}

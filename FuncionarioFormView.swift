@@ -127,34 +127,40 @@ struct FuncionarioFormView: View {
     }
 
     private func saveAndDismiss() {
-        // Apply edited fields back to the Core Data object
-        if funcionario.id == nil {
-            funcionario.id = UUID()
-        }
-        funcionario.nome = nomeText.trimmingCharacters(in: .whitespacesAndNewlines)
-        funcionario.funcao = cargoText.trimmingCharacters(in: .whitespacesAndNewlines)
-        funcionario.regional = regionalText.trimmingCharacters(in: .whitespacesAndNewlines)
-        funcionario.celular = telefoneText.trimmingCharacters(in: .whitespacesAndNewlines)
-        funcionario.email = emailText.trimmingCharacters(in: .whitespacesAndNewlines)
-        funcionario.favorito = favorito
-        funcionario.imagem = fotoData
-
-        do {
-            try viewContext.save()
-            // Notify listeners similarly to FavoritesView usage
-            NotificationCenter.default.post(name: .funcionarioAtualizado, object: nil)
-            FirestoreMigrator.uploadFuncionario(objectID: funcionario.objectID, context: viewContext) { result in
-                switch result {
-                case .success:
-                    print("[FuncionarioForm] Upload OK: \(funcionario.objectID)")
-                case .failure(let error):
-                    print("[FuncionarioForm] Upload ERRO: \(error.localizedDescription)")
-                }
+        // Ensure Core Data mutations and save happen on the context's queue
+        viewContext.perform {
+            // Apply edited fields back to the Core Data object
+            if self.funcionario.id == nil {
+                self.funcionario.id = UUID()
             }
-            dismiss()
-        } catch {
-            // In a real app, present an alert; for now we log
-            print("Erro ao salvar funcionario: \(error.localizedDescription)")
+            self.funcionario.nome = self.nomeText.trimmingCharacters(in: .whitespacesAndNewlines)
+            self.funcionario.funcao = self.cargoText.trimmingCharacters(in: .whitespacesAndNewlines)
+            self.funcionario.regional = self.regionalText.trimmingCharacters(in: .whitespacesAndNewlines)
+            self.funcionario.celular = self.telefoneText.trimmingCharacters(in: .whitespacesAndNewlines)
+            self.funcionario.email = self.emailText.trimmingCharacters(in: .whitespacesAndNewlines)
+            self.funcionario.favorito = self.favorito
+            self.funcionario.imagem = self.fotoData
+
+            do {
+                try self.viewContext.save()
+
+                // Notify and upload on the main actor after a successful save
+                Task { @MainActor in
+                    NotificationCenter.default.post(name: .funcionarioAtualizado, object: nil)
+                    FirestoreMigrator.uploadFuncionario(objectID: self.funcionario.objectID, context: self.viewContext) { result in
+                        switch result {
+                        case .success:
+                            print("[FuncionarioForm] Upload OK: \(self.funcionario.objectID)")
+                        case .failure(let error):
+                            print("[FuncionarioForm] Upload ERRO: \(error.localizedDescription)")
+                        }
+                    }
+                    self.dismiss()
+                }
+            } catch {
+                let nsError = error as NSError
+                print("Erro ao salvar funcionario: \(nsError.localizedDescription)\nDomain: \(nsError.domain) Code: \(nsError.code)\nUserInfo: \(nsError.userInfo)")
+            }
         }
     }
 }

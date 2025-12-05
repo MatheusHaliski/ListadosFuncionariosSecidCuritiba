@@ -13,6 +13,7 @@ struct FuncionarioDetailView: View {
     @State private var mostrandoEdicao = false
     @State private var isFavorite: Bool
     @State private var mostrandoProjetos = false
+    @Environment(\.dismiss) private var dismiss
 
     init(funcionario: Funcionario, onEdit: (() -> Void)? = nil) {
         self.funcionario = funcionario
@@ -81,6 +82,16 @@ struct FuncionarioDetailView: View {
                             .foregroundStyle(.blue)
                     }
                 }
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(role: .destructive) {
+                    deleteFuncionario()
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 22))
+                        .foregroundStyle(.red)
+                }
+                .accessibilityLabel("Deletar funcionário")
             }
         }
 
@@ -292,6 +303,21 @@ struct FuncionarioDetailView: View {
 
         } catch {
             print("[Detail] Erro ao salvar favorito: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - DELETE
+    private func deleteFuncionario() {
+        let idString = funcionario.objectID.uriRepresentation().absoluteString
+        // Firebase placeholder
+        print("[Firebase] Deleting Funcionario with id: \(idString)")
+        // Core Data deletion
+        viewContext.delete(funcionario)
+        do {
+            try viewContext.save()
+            dismiss()
+        } catch {
+            print("[Detail] Erro ao deletar funcionário: \(error.localizedDescription)")
         }
     }
 

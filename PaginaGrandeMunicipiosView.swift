@@ -18,6 +18,7 @@ struct PaginaGrandeMunicipiosView: View {
     @State private var searchText: String = ""
     @State private var regionalSelecionada: String = ""
     @State private var zoom: CGFloat = 1.0
+    @State private var showPurgeConfirmation = false
 
     // MARK: - REGION LIST
     private var todasRegionais: [String] {
@@ -52,13 +53,48 @@ struct PaginaGrandeMunicipiosView: View {
         }
     }
 
+    // MARK: - DELETE HELPERS
+    private func deleteMunicipio(_ municipio: Municipio) {
+        deleteFromFirebase(entity: "Municipio", id: municipio.objectID.uriRepresentation().absoluteString)
+        context.delete(municipio)
+        do { try context.save() } catch { print("Erro ao salvar após deletar Município: \(error)") }
+    }
+
+    private func deleteFromFirebase(entity: String, id: String) {
+        // TODO: Integrate with your Firebase layer. Example:
+        // Firestore.firestore().collection(entity).document(id).delete { error in ... }
+        print("[Firebase] Deleting \(entity) with id: \(id)")
+    }
+
     // MARK: - BODY
     var body: some View {
         NavigationStack {
             ZoomableScrollView5(minZoomScale: 0.5, maxZoomScale: 3.0) {
                 content
             }
-            .navigationTitle("Pesquisa de Municípios")
+            .navigationTitle("Municípios")
+#if DEBUG
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(role: .destructive) {
+                        showPurgeConfirmation = true
+                    } label: {
+                        Text("Limpar Tudo")
+                    }
+                    .accessibilityLabel("Limpar todas as regionais")
+                }
+            }
+            .confirmationDialog(
+                "Deseja deletar a tabela de municipio?",
+                isPresented: $showPurgeConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Apagar Tabela de Municípios", role: .destructive) {
+                    purgeAllMunicipios()
+                }
+                Button("Cancelar", role: .cancel) { }
+            }
+#endif
         }
     }
 
@@ -134,6 +170,13 @@ struct PaginaGrandeMunicipiosView: View {
                 LazyVStack(spacing: 0) {
                     ForEach(filteredMunicipios, id: \.objectID) { municipio in
                         MunicipioCardRow(municipio: municipio, zoom: zoom)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    deleteMunicipio(municipio)
+                                } label: {
+                                    Label("Deletar", systemImage: "trash")
+                                }
+                            }
                     }
                 }
                 .padding(.vertical, 8)
@@ -147,6 +190,30 @@ struct PaginaGrandeMunicipiosView: View {
         .frame(minWidth: 5000, minHeight: 5000, alignment: .topLeading)
         .background(Color(.systemGray6))
     }
+    private func purgeAllMunicipios() {
+        let fetch = NSFetchRequest<NSFetchRequestResult>(entityName: "Municipio")
+        let batchDelete = NSBatchDeleteRequest(fetchRequest: fetch)
+        do {
+            // Optional: mirror deletion in Firebase if desired
+            print("[Firebase] Deleting entire Municipios collection (implement real call if needed)")
+            try context.execute(batchDelete)
+            try context.save()
+        } catch {
+            print("[PaginaGrandeView2] Erro ao apagar todos os Municípios: \(error.localizedDescription)")
+        }
+    }
+#if DEBUG
+    private func purgeAllRegionais() {
+        let fetch = NSFetchRequest<NSFetchRequestResult>(entityName: "RegionalInfo5")
+        let batchDelete = NSBatchDeleteRequest(fetchRequest: fetch)
+        do {
+            try context.execute(batchDelete)
+            try context.save()
+        } catch {
+            print("[PaginaGrandeMunicipiosView] Erro ao apagar todas as regionais: \(error.localizedDescription)")
+        }
+    }
+#endif
 }
 
 struct MunicipioCardRow: View {
@@ -240,5 +307,4 @@ struct ZoomableScrollView5<Content: View>: UIViewRepresentable {
         }
     }
 }
-
 

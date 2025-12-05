@@ -1,0 +1,225 @@
+//
+//  RegionalInfoDetailView.swift
+//  ListaFuncionariosApp
+//
+//  Created by Matheus Braschi Haliski on 04/12/25.
+//
+
+import SwiftUI
+internal import CoreData
+
+struct RegionalInfoDetailView: View {
+    let regional: RegionalInfo5  // entidade do Core Data
+    let onEdit: (() -> Void)? = nil
+
+    @Environment(\.managedObjectContext) private var viewContext
+    @Environment(\.dismiss) private var dismiss
+    @State private var mostrandoEdicao = false
+    @State private var mostrandoEdicaoMunicipio = false
+    @State private var showPurgeConfirmation = false
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+
+                // Título Principal
+                Text(regional.nome ?? "Regional")
+                    .font(.system(size: 34, weight: .bold))
+                    .foregroundColor(Color.blue)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 20)
+
+                // Card de Informações
+                VStack(spacing: 0) {
+
+                    infoRow(
+                        icon: "mappin.and.ellipse",
+                        iconColor: .red,
+                        title: "Endereço",
+                        text: regional.endereco ?? "Não informado"
+                    )
+
+                    infoRow(
+                        icon: "person.crop.circle.badge.checkmark",
+                        iconColor: .green,
+                        title: "Chefe",
+                        text: regional.chefe ?? "Não informado"
+                    )
+
+                    infoRow(
+                        icon: "phone.fill",
+                        iconColor: .blue,
+                        title: "Telefone / Ramal",
+                        text: regional.ramal ?? "Não informado"
+                    )
+                }
+                .padding(.top, 4)
+                .padding(20)
+                .background(Color.white)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.blue.opacity(0.25), lineWidth: 1.5)
+                )
+                .cornerRadius(16)
+                .padding(.horizontal, 16)
+
+                Spacer(minLength: 40)
+            }
+
+        }
+        .background(Color(.systemBackground))
+        .navigationTitle("Detalhes da Regional")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if let onEdit = onEdit {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        mostrandoEdicao = true
+                        onEdit()
+                    } label: {
+                        Image(systemName: "pencil.circle.fill")
+                            .font(.system(size: 22))
+                            .foregroundStyle(.blue)
+                    }
+                }
+            }
+
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(role: .destructive) {
+                    deleteRegional()
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 22))
+                        .foregroundStyle(.red)
+                }
+                .accessibilityLabel("Deletar regional")
+            }
+
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    mostrandoEdicaoMunicipio = true
+                } label: {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 22))
+                        .foregroundStyle(.blue)
+                }
+                .accessibilityLabel("Editar município")
+            }
+        }
+        .sheet(isPresented: $mostrandoEdicao) {
+            NavigationStack {
+                RegionalFormView(
+                    regional: regional,
+                    onSaved: {
+                        // Persist any pending changes and provide user feedback without dismissing
+                        do {
+                            if viewContext.hasChanges {
+                                try viewContext.save()
+                                viewContext.refresh(regional, mergeChanges: true)
+                            }
+                            // Trigger a light UI refresh by toggling a benign state change
+                            withAnimation { _ = regional.objectID }
+                            // Optionally, haptic feedback to signal success
+                            #if os(iOS)
+                            let generator = UINotificationFeedbackGenerator()
+                            generator.notificationOccurred(.success)
+                            #endif
+                        } catch {
+                            print("[RegionalDetail] Erro ao salvar alterações: \(error.localizedDescription)")
+                        }
+                    }
+                )
+                .environment(\.managedObjectContext, viewContext)
+            }
+        }
+        .sheet(isPresented: $mostrandoEdicaoMunicipio) {
+            NavigationStack {
+                RegionalFormView(
+                    regional: regional,
+                    onSaved: {
+                        do {
+                            if viewContext.hasChanges {
+                                try viewContext.save()
+                                viewContext.refresh(regional, mergeChanges: true)
+                            }
+                            // Light UI refresh to reflect changes
+                            withAnimation { _ = regional.objectID }
+                            // Dismiss the municipio edit sheet
+                            mostrandoEdicaoMunicipio = false
+                            #if os(iOS)
+                            let generator = UINotificationFeedbackGenerator()
+                            generator.notificationOccurred(.success)
+                            #endif
+                        } catch {
+                            print("[RegionalDetail] Erro ao salvar município: \(error.localizedDescription)")
+                        }
+                    }
+                )
+                .environment(\.managedObjectContext, viewContext)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func infoRow(icon: String, iconColor: Color, title: String, text: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundColor(iconColor)
+                .frame(width: 32, height: 32, alignment: .center)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.primary)
+            }
+            .frame(width: 140, alignment: .leading)
+
+            Rectangle()
+                .fill(Color.blue.opacity(0.25))
+                .frame(width: 1)
+                .frame(maxHeight: .infinity)
+
+            Text(text)
+                .font(.system(size: 18, weight: .regular))
+                .foregroundColor(.primary)
+                .multilineTextAlignment(.trailing)
+                .lineLimit(3)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .frame(maxWidth: .infinity, minHeight: 56, alignment: .center)
+        .padding(.vertical, 8)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color.blue.opacity(0.25))
+                .frame(height: 1)
+                .offset(x: 0, y: 0)
+        }
+    }
+
+    // MARK: - DELETE REGIONAL
+    private func deleteRegional() {
+        // Placeholder: delete regional from Core Data
+        viewContext.delete(regional)
+        do {
+            try viewContext.save()
+            dismiss()
+        } catch {
+            print("[RegionalDetail] Erro ao deletar regional: \(error.localizedDescription)")
+        }
+    }
+
+    #if DEBUG
+    private func purgeAllRegionais() {
+        // Delete all RegionalInfo5 objects from Core Data in DEBUG builds
+        let fetch = NSFetchRequest<NSFetchRequestResult>(entityName: "RegionalInfo5")
+        let batchDelete = NSBatchDeleteRequest(fetchRequest: fetch)
+        do {
+            try viewContext.execute(batchDelete)
+            try viewContext.save()
+        } catch {
+            print("[RegionalDetail] Erro ao apagar todas as regionais: \(error.localizedDescription)")
+        }
+    }
+    #endif
+}
