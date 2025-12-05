@@ -42,9 +42,16 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         #else
         print("[AppCheck] FirebaseAppCheck not available; skipping AppCheck debug setup.")
         #endif
-        // Agora você consegue chamar isto SEM CRASH:
-        funcionarioViewModel.resetToDefaultMode()
-        print("[Launch] resetToDefaultMode() executed")
+
+        // Optional debug reset controlled by an env var to avoid wiping data on every
+        // Xcode launch. Enable by setting ENABLE_DEBUG_DATA_RESET=1 in the scheme.
+        let shouldRunDebugReset = ProcessInfo.processInfo.environment["ENABLE_DEBUG_DATA_RESET"] == "1"
+        if shouldRunDebugReset {
+            funcionarioViewModel.resetToDefaultMode()
+            AppDataResetter.resetForXcodeBuildIfNeeded(context: context)
+        } else {
+            print("[Launch] Debug data reset skipped (ENABLE_DEBUG_DATA_RESET not set).")
+        }
         #endif
         // -----------------------------------------------------------
 
@@ -59,7 +66,6 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         #else
         print("[Firebase] FirebaseCore not available; skipping FirebaseApp.configure().")
         #endif
-        AppDataResetter.resetForXcodeBuildIfNeeded(context: context)
         return true
     }
 }
