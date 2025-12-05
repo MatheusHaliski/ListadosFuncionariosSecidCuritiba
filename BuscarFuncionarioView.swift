@@ -226,7 +226,8 @@ struct BuscarFuncionarioView: View {
             .task(id: "firestoreSyncOnce") {
                 guard !didSyncFromFirestore else { return }
                 didSyncFromFirestore = true
-                FirestoreMigrator.syncFromFirestoreToCoreData(context: context) { _ in }
+                let syncContext = PersistenceController.shared.makeBackgroundContext()
+                FirestoreMigrator.syncFromFirestoreToCoreData(context: syncContext) { _ in }
             }
         }
     }
