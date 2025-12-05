@@ -204,22 +204,6 @@ struct HomeView: View {
                 }
 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Menu {
-                        Picker("Theme", selection: Binding(
-                            get: { UserDefaults.standard.string(forKey: "app_theme_preference") ?? "system" },
-                            set: { UserDefaults.standard.set($0, forKey: "app_theme_preference") }
-                        )) {
-                            Text("System").tag("system")
-                            Text("Light").tag("light")
-                            Text("Dark").tag("dark")
-                        }
-                        .pickerStyle(.inline)
-                    } label: {
-                        Label("Theme", systemImage: "moon.circle")
-                    }
-                }
-
-                ToolbarItem(placement: .navigationBarTrailing) {
                     ZoomMenuButton(persistedZoom: $persistedZoom)
                 }
             }

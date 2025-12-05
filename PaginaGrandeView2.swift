@@ -1,5 +1,6 @@
 import SwiftUI
 internal import CoreData
+import SDWebImageSwiftUI
 #if os(iOS)
 import UIKit
 #endif
@@ -397,17 +398,35 @@ struct CardRowSimple11: View {
     @ObservedObject var funcionario: Funcionario
     let zoom: CGFloat
     private var profileImage: some View {
-        ZStack {
-            if let data = funcionario.imagem,
-               let uiImage = UIImage(data: data) {
+        Group {
+            if let urlString = funcionario.imagemURL, let url = URL(string: urlString) {
+                WebImage(url: url) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    ZStack {
+                        Circle().fill(Color(.systemGray5))
+                        Text(String(funcionario.nome?.first ?? "F"))
+                            .font(.system(size: 22 * zoom))
+                            .foregroundColor(.primary)
+                    }
+                }
+                .onFailure { error in
+                    print("[WebImage] failed: \(error.localizedDescription)")
+                }
+            } else if let data = funcionario.imagem,
+                      let uiImage = UIImage(data: data) {
                 Image(uiImage: uiImage)
                     .resizable()
                     .scaledToFill()
             } else {
-                Circle().fill(Color(.systemGray5))
-                Text(String(funcionario.nome?.first ?? "F"))
-                    .font(.system(size: 22 * zoom))
-                    .foregroundColor(.primary)
+                ZStack {
+                    Circle().fill(Color(.systemGray5))
+                    Text(String(funcionario.nome?.first ?? "F"))
+                        .font(.system(size: 22 * zoom))
+                        .foregroundColor(.primary)
+                }
             }
         }
         .clipShape(Circle())
@@ -506,3 +525,4 @@ struct ZoomableScrollView23<Content: View>: UIViewRepresentable {
         }
     }
 }
+

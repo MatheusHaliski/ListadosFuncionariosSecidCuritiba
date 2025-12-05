@@ -10,6 +10,8 @@ import Foundation
 internal import CoreData
 import FirebaseFirestore
 import FirebaseStorage
+import SDWebImage
+import SDWebImageSwiftUI
 
 struct FirestoreMigrator {
 
@@ -135,7 +137,7 @@ struct FirestoreMigrator {
                     updatedCount += 1
 
                     if let urlStr = imageURLString, let url = URL(string: urlStr) {
-                        ImageStorage.downloadImage(from: url) { result in
+                        SDImageStorage.downloadImage(from: url) { result in
                             context.perform {
                                 if case .success(let imageData) = result {
                                     funcionario.imagem = imageData
@@ -361,7 +363,7 @@ struct FirestoreMigrator {
                     if let urlStr = data["imageURL"] as? String,
                        let url = URL(string: urlStr) {
 
-                        ImageStorage.downloadImage(from: url) { result in
+                        SDImageStorage.downloadImage(from: url) { result in
                             context.perform {
                                 if case .success(let img) = result {
                                     funcObj.imagem = img
@@ -559,6 +561,35 @@ struct FirestoreMigrator {
             migrateMunicipiosToFirestore(from: context) { result in
                 continuation.resume(with: result)
             }
+        }
+    }
+    
+    // MARK: - SDWebImage-backed image storage helper
+    fileprivate enum SDImageStorage {
+        static func downloadImage(from url: URL, completion: @escaping (Result<Data, Error>) -> Void) {
+            // Use a shared URL cache-aware session
+            let config = URLSessionConfiguration.default
+            config.requestCachePolicy = .returnCacheDataElseLoad
+            config.urlCache = URLCache.shared
+            let session = URLSession(configuration: config)
+
+            var request = URLRequest(url: url)
+            request.cachePolicy = .returnCacheDataElseLoad
+
+            let task = session.dataTask(with: request) { data, response, error in
+                if let error = error {
+                    completion(.failure(error))
+                    return
+                }
+                if let data = data, !data.isEmpty {
+                    // If the server returned image bytes, pass them through
+                    completion(.success(data))
+                    return
+                }
+                // As a fallback, try to construct image data from response if possible (no external frameworks)
+                completion(.failure(NSError(domain: "SDImageStorage", code: -2, userInfo: [NSLocalizedDescriptionKey: "No image data received"])) )
+            }
+            task.resume()
         }
     }
 }
