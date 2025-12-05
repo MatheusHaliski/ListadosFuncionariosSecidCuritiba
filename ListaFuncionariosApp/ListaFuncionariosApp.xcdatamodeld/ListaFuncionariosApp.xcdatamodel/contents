@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="24299" systemVersion="25B78" minimumToolsVersion="Automatic" sourceLanguage="Swift" usedWithCloudKit="YES" userDefinedModelVersionIdentifier="">
+    <entity name="Funcionario" representedClassName="Funcionario" syncable="YES" codeGenerationType="class">
+        <attribute name="celular" optional="YES" attributeType="String"/>
+        <attribute name="email" optional="YES" attributeType="String"/>
+        <attribute name="favorito" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
+        <attribute name="funcao" optional="YES" attributeType="String"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="imagem" optional="YES" attributeType="Binary" allowsExternalBinaryDataStorage="YES"/>
+        <attribute name="imagemURL" optional="YES" attributeType="String"/>
+        <attribute name="nome" optional="YES" attributeType="String"/>
+        <attribute name="ramal" optional="YES" attributeType="String"/>
+        <attribute name="regional" optional="YES" attributeType="String"/>
+        <relationship name="projetos" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Projeto" inverseName="funcionario" inverseEntity="Projeto"/>
+    </entity>
+    <entity name="Item" representedClassName="Item" syncable="YES" codeGenerationType="class">
+        <attribute name="timestamp" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+    </entity>
+    <entity name="Municipio" representedClassName="Municipio" syncable="YES" codeGenerationType="class">
+        <attribute name="favorito" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
+        <attribute name="nome" optional="YES" attributeType="String"/>
+        <attribute name="regional" optional="YES" attributeType="String"/>
+    </entity>
+    <entity name="Projeto" representedClassName="Projeto" syncable="YES" codeGenerationType="class">
+        <attribute name="descricao" optional="YES" attributeType="String"/>
+        <attribute name="nome" optional="YES" attributeType="String"/>
+        <attribute name="status" optional="YES" attributeType="String"/>
+        <relationship name="funcionario" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Funcionario" inverseName="projetos" inverseEntity="Funcionario"/>
+    </entity>
+    <entity name="RegionalInfo5" representedClassName="RegionalInfo5" syncable="YES" codeGenerationType="class">
+        <attribute name="chefe" optional="YES" attributeType="String"/>
+        <attribute name="endereco" optional="YES" attributeType="String"/>
+        <attribute name="nome" optional="YES" attributeType="String"/>
+        <attribute name="ramal" optional="YES" attributeType="String"/>
+    </entity>
+</model>
