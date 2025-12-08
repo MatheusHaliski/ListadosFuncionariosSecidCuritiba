@@ -83,107 +83,114 @@ struct HomeView: View {
     @State private var mostrandoSobreSECID = false
     @State private var selectedRegional: String = ""
     @AppStorage("app_zoom_scale") private var persistedZoom: Double = 1.0
+    @StateObject var navState = AppNavigationState()
 
     let regionais = ["Filtrar lista por regional"]
 
     var body: some View {
         NavigationStack {
+            Group {
+                switch navState.screen {
+                case .main:
+                    ZoomableScrollView3(minZoomScale: 0.5, maxZoomScale: 3.0) {
 
-            // 🔥 ENTIRE HOMEVIEW IS NOW ZOOMABLE + SCROLLABLE
-            ZoomableScrollView3(minZoomScale: 0.5, maxZoomScale: 3.0) {
+                        VStack {
+                            VStack(spacing: 20) {
 
-                VStack {
-                    VStack(spacing: 20) {
-
-                        // 🔹 Cabeçalho com logo
-                        ZStack(alignment: .bottomLeading) {
-                            LinearGradient(colors: [Color.white],
-                                           startPoint: .topLeading, endPoint: .bottomTrailing)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 160)
-                                .overlay(
-                                    Image("governo_parana")
-                                        .resizable()
-                                        .scaledToFit()
-                                        .frame(height: 100)
-                                        .padding(.horizontal)
-                                )
-                                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                                .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 6)
-                        }
-                        .padding(.top, 8)
-
-                        // 🔹 Título e subtítulo
-                        VStack(spacing: 6) {
-                            Text("Lista de Servidores do Estado do Paraná")
-                                .font(.title2.weight(.semibold))
-                                .multilineTextAlignment(.center)
-                            Text("Encontre informação sobre funcionários e municípios")
-                                .font(.headline)
-                                .foregroundColor(.secondary)
-                        }
-
-                        // 🔹 Botão Adicionar Funcionário
-                        Button(action: {
-                            selectedRegional = ""
-                            let f = Funcionario(context: viewContext)
-                            f.nome = ""
-                            f.funcao = ""
-                            f.celular = ""
-                            f.email = ""
-                            f.favorito = false
-                            f.ramal = ""
-                            f.regional = ""
-                            self.funcionario = f
-                            mostrandoFormulario = true
-                        }) {
-                            HomeRow(icon: "person.badge.plus", color: .white, text: "Adicionar Funcionário")
-                        }
-                        .sheet(isPresented: $mostrandoFormulario) {
-                            if let f = funcionario {
-                                NavigationView {
-                                    FuncionarioFormView(
-                                        regional: selectedRegional,
-                                        funcionario: f,
-                                        isEditando: false
-                                    )
-                                    .environment(\.managedObjectContext, viewContext)
+                                // 🔹 Cabeçalho com logo
+                                ZStack(alignment: .bottomLeading) {
+                                    LinearGradient(colors: [Color.white],
+                                                   startPoint: .topLeading, endPoint: .bottomTrailing)
+                                        .frame(maxWidth: .infinity)
+                                        .frame(height: 160)
+                                        .overlay(
+                                            Image("governo_parana")
+                                                .resizable()
+                                                .scaledToFit()
+                                                .frame(height: 100)
+                                                .padding(.horizontal)
+                                        )
+                                        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                                        .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 6)
                                 }
-                            } else {
-                                Text("Erro ao criar funcionário.")
+                                .padding(.top, 8)
+
+                                // 🔹 Título e subtítulo
+                                VStack(spacing: 6) {
+                                    Text("Lista de Servidores do Estado do Paraná")
+                                        .font(.title2.weight(.semibold))
+                                        .multilineTextAlignment(.center)
+                                    Text("Encontre informação sobre funcionários e municípios")
+                                        .font(.headline)
+                                        .foregroundColor(.secondary)
+                                }
+
+                                // 🔹 Botão Adicionar Funcionário
+                                Button(action: {
+                                    selectedRegional = ""
+                                    let f = Funcionario(context: viewContext)
+                                    f.nome = ""
+                                    f.funcao = ""
+                                    f.celular = ""
+                                    f.email = ""
+                                    f.favorito = false
+                                    f.ramal = ""
+                                    f.regional = ""
+                                    self.funcionario = f
+                                    mostrandoFormulario = true
+                                }) {
+                                    HomeRow(icon: "person.badge.plus", color: .white, text: "Adicionar Funcionário")
+                                }
+                                .sheet(isPresented: $mostrandoFormulario) {
+                                    if let f = funcionario {
+                                        NavigationView {
+                                            FuncionarioFormView(
+                                                regional: selectedRegional,
+                                                funcionario: f,
+                                                isEditando: false
+                                            )
+                                            .environment(\.managedObjectContext, viewContext)
+                                        }
+                                    } else {
+                                        Text("Erro ao criar funcionário.")
+                                    }
+                                }
+
+                                // 🔹 Buscar Servidor
+                                NavigationLink(destination: PaginaGrandeView().appHeaderFooter()) {
+                                    HomeRow(icon: "magnifyingglass.circle.fill", color: .blue, text: "Buscar Servidor")
+                                }
+
+                                // 🔹 Favoritos
+                                NavigationLink(destination: PaginaGrandeView2().appHeaderFooter()) {
+                                    HomeRow(icon: "star.fill", color: .yellow, text: "Favoritos")
+                                }
+
+                                // 🔹 Municípios
+                                NavigationLink(destination: PaginaGrandeMunicipiosView().appHeaderFooter()) {
+                                    HomeRow(icon: "map.fill", color: .orange, text: "Ver Municípios")
+                                }
+
+                                NavigationLink(destination: PaginaGrandeInfoView().appHeaderFooter()) {
+                                    HomeRow(icon: "building.2.fill", color: .teal, text: "Informações das Regionais")
+                                }
+
+                                Spacer(minLength: 20)
                             }
+                            .frame(maxWidth: 700)
+                            .padding(.horizontal)
                         }
+                        .frame(minWidth: 2500, minHeight: 2500, alignment: .topLeading)
+                        .padding(.top, 20)
+                        .padding(.leading, 20)
 
-                        // 🔹 Buscar Servidor
-                        NavigationLink(destination: PaginaGrandeView().appHeaderFooter()) {
-                            HomeRow(icon: "magnifyingglass.circle.fill", color: .blue, text: "Buscar Servidor")
-                        }
-
-                        // 🔹 Favoritos
-                        NavigationLink(destination: PaginaGrandeView2().appHeaderFooter()) {
-                            HomeRow(icon: "star.fill", color: .yellow, text: "Favoritos")
-                        }
-
-                        // 🔹 Municípios
-                        NavigationLink(destination: PaginaGrandeMunicipiosView().appHeaderFooter()) {
-                            HomeRow(icon: "map.fill", color: .orange, text: "Ver Municípios")
-                        }
-
-                        NavigationLink(destination: PaginaGrandeInfoView().appHeaderFooter()) {
-                            HomeRow(icon: "building.2.fill", color: .teal, text: "Informações das Regionais")
-                        }
-
-                        Spacer(minLength: 20)
                     }
-                    .frame(maxWidth: 700)
-                    .padding(.horizontal)
+
+                case .detail(let funcionario):
+                    FuncionarioDetailView(funcionario: funcionario)
+
                 }
-                .frame(minWidth: 2500, minHeight: 2500, alignment: .topLeading)
-                .padding(.top, 20)
-                .padding(.leading, 20)
-
             }
-
             .navigationTitle("Regionais SECID")
             .navigationBarTitleDisplayMode(.inline)
             .appZoomScale(CGFloat(persistedZoom))
@@ -202,12 +209,9 @@ struct HomeView: View {
                         SobreSECIDView().appHeaderFooter().appZoomControls()
                     }
                 }
-
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    ZoomMenuButton(persistedZoom: $persistedZoom)
-                }
             }
         }
+        .environmentObject(navState)
     }
 }
 
@@ -316,5 +320,4 @@ struct ZoomableScrollView3<Content: View>: UIViewRepresentable {
         }
     }
 }
-
 

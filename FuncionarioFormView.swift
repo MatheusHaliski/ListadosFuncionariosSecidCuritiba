@@ -8,10 +8,15 @@ import PhotosUI
 
 /// Displays a form for creating or editing a Funcionario. Used in the Add flow from HomeView.
 struct FuncionarioFormView: View {
-    @Environment(\.managedObjectContext) private var viewContext
+    @Environment(\.managedObjectContext) private var viewContext {
+        didSet {
+            viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+        }
+    }
     @Environment(\.dismiss) private var dismiss
 
     let isEditando: Bool
+    let onSaved: (() -> Void)?
 
     // MARK: - Form State Properties
     // The Core Data object being edited
@@ -30,9 +35,10 @@ struct FuncionarioFormView: View {
 #endif
 
     // MARK: - Initializer, seeds state for creation or editing context
-    init(regional: String, funcionario: Funcionario, isEditando: Bool) {
+    init(regional: String, funcionario: Funcionario, isEditando: Bool, onSaved: (() -> Void)? = nil) {
         self._funcionario = ObservedObject(initialValue: funcionario)
         self.isEditando = isEditando
+        self.onSaved = onSaved
         // Seed state from the provided object, falling back to the provided regional
         _regionalText = State(initialValue: (funcionario.regional?.isEmpty == false ? funcionario.regional! : regional))
         _nomeText = State(initialValue: funcionario.nome ?? "")
@@ -129,6 +135,7 @@ struct FuncionarioFormView: View {
     private func saveAndDismiss() {
         // Ensure Core Data mutations and save happen on the context's queue
         viewContext.perform {
+            viewContext.refresh(funcionario, mergeChanges: true)
             // Apply edited fields back to the Core Data object
             if self.funcionario.id == nil {
                 self.funcionario.id = UUID()
@@ -155,12 +162,15 @@ struct FuncionarioFormView: View {
                             print("[FuncionarioForm] Upload ERRO: \(error.localizedDescription)")
                         }
                     }
+                    self.onSaved?()
                     self.dismiss()
                 }
             } catch {
+                viewContext.rollback()
                 let nsError = error as NSError
                 print("Erro ao salvar funcionario: \(nsError.localizedDescription)\nDomain: \(nsError.domain) Code: \(nsError.code)\nUserInfo: \(nsError.userInfo)")
             }
         }
     }
 }
+

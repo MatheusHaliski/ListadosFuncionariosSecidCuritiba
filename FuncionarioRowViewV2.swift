@@ -61,10 +61,10 @@ struct FuncionarioRowViewV2: View {
             .animation(.easeInOut, value: image)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(funcionario.nome ?? "(Sem nome)")
+                Text("Nome: \(funcionario.nome ?? "(Sem nome)")")
                     .font(.headline)
-                Text(funcionario.funcao ?? "")
-                    .font(.subheadline)
+                Text("Função: \(funcionario.funcao ?? "")")
+                    .font(.headline)
                     .foregroundColor(.secondary)
                 if let regional = funcionario.regional {
                     Text(regional)
@@ -101,3 +101,4 @@ struct FuncionarioRowViewV2: View {
     funcionario.favorito = true
     return FuncionarioRowViewV2(funcionario: funcionario)
 }
+

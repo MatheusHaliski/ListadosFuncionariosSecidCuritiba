@@ -7,6 +7,7 @@ struct FuncionarioDetailView: View {
 
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.openURL) private var openURL
+    @EnvironmentObject var navState: AppNavigationState
 
     private let contactService: ContactService = DefaultContactService.shared
 
@@ -30,14 +31,14 @@ struct FuncionarioDetailView: View {
                     profileImage
                         .padding(.top, 20)
 
-                    Text(funcionario.nome ?? "Sem nome")
+                    Text("Nome: \(funcionario.nome ?? "(Sem nome)")")
                         .font(.largeTitle.weight(.semibold))
                         .multilineTextAlignment(.center)
+   
 
                     if let funcao = funcionario.funcao, !funcao.isEmpty {
-                        Text(funcao)
-                            .font(.headline)
-                            .foregroundStyle(.secondary)
+                        Text("Função: \(funcionario.funcao ?? "")")
+                            .font(.largeTitle.weight(.semibold))
                             .multilineTextAlignment(.center)
                     }
                 }
@@ -96,14 +97,15 @@ struct FuncionarioDetailView: View {
         }
 
         .sheet(isPresented: $mostrandoEdicao) {
-            NavigationStack {
-                FuncionarioFormView(
-                    regional: funcionario.regional ?? "",
-                    funcionario: funcionario,
-                    isEditando: true
-                )
-            }
-        }
+                    NavigationStack {
+                        FuncionarioFormView(
+                            regional: funcionario.regional ?? "",
+                            funcionario: funcionario,
+                            isEditando: true,
+                            onSaved: { navState.screen = .main }
+                        )
+                    }
+                }
 
         .sheet(isPresented: $mostrandoProjetos) {
             ProjetosModalView(funcionario: funcionario)

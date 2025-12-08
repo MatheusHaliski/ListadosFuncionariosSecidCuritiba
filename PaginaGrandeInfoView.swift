@@ -266,57 +266,107 @@ struct CardRowSimple2: View {
     }
 }
 
-
-
-// MARK: - BASIC ZOOMABLE SCROLLVIEW
+// MARK: - ZOOMABLE SCROLLVIEW WITH KEYBOARD AUTO-SCROLL BLOCKER
 struct ZoomableScrollView02<Content: View>: UIViewRepresentable {
     var minZoomScale: CGFloat
     var maxZoomScale: CGFloat
     @ViewBuilder var content: () -> Content
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(host: UIHostingController(rootView: content()))
+        Coordinator(self, host: UIHostingController(rootView: content()))
     }
 
     func makeUIView(context: Context) -> UIScrollView {
-        let scrollView = UIScrollView()
-        scrollView.minimumZoomScale = minZoomScale
-        scrollView.maximumZoomScale = maxZoomScale
-        scrollView.delegate = context.coordinator
-        scrollView.showsVerticalScrollIndicator = true
-        scrollView.showsHorizontalScrollIndicator = true
-        scrollView.bouncesZoom = true
 
+        let scroll = UIScrollView()
+        scroll.minimumZoomScale = minZoomScale
+        scroll.maximumZoomScale = maxZoomScale
+        scroll.delegate = context.coordinator
+        scroll.showsVerticalScrollIndicator = true
+        scroll.showsHorizontalScrollIndicator = true
+        scroll.bouncesZoom = true
+
+        scroll.keyboardDismissMode = .interactive
+        scroll.contentInsetAdjustmentBehavior = .never   // 👈 impede ajustes automáticos
+
+        // HOST VIEW
         let hostView = context.coordinator.host.view!
         hostView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.addSubview(hostView)
+        scroll.addSubview(hostView)
 
         NSLayoutConstraint.activate([
-            hostView.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
-            hostView.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
-            hostView.topAnchor.constraint(equalTo: scrollView.topAnchor),
-            hostView.bottomAnchor.constraint(equalTo: scrollView.bottomAnchor)
+            hostView.leadingAnchor.constraint(equalTo: scroll.leadingAnchor),
+            hostView.trailingAnchor.constraint(equalTo: scroll.trailingAnchor),
+            hostView.topAnchor.constraint(equalTo: scroll.topAnchor),
+            hostView.bottomAnchor.constraint(equalTo: scroll.bottomAnchor)
         ])
 
-        return scrollView
+        // LISTEN TO KEYBOARD
+        NotificationCenter.default.addObserver(
+            context.coordinator,
+            selector: #selector(Coordinator.keyboardWillShow),
+            name: UIResponder.keyboardWillShowNotification,
+            object: nil
+        )
+
+        NotificationCenter.default.addObserver(
+            context.coordinator,
+            selector: #selector(Coordinator.keyboardWillHide),
+            name: UIResponder.keyboardWillHideNotification,
+            object: nil
+        )
+
+        return scroll
     }
 
     func updateUIView(_ scrollView: UIScrollView, context: Context) {
-        // Agora, quando searchText/regionalSelecionada mudam,
-        // o SwiftUI recalcula `content()` e atualizamos o rootView:
         context.coordinator.host.rootView = content()
     }
 
+    // MARK: - COORDINATOR
     class Coordinator: NSObject, UIScrollViewDelegate {
+
+        let parent: ZoomableScrollView02
         let host: UIHostingController<Content>
 
-        init(host: UIHostingController<Content>) {
+        var keyboardVisible = false
+        var lockedX: CGFloat = 0
+
+        init(_ parent: ZoomableScrollView02, host: UIHostingController<Content>) {
+            self.parent = parent
             self.host = host
+        }
+
+        // MARK: KEYBOARD STATES
+        @objc func keyboardWillShow() {
+            keyboardVisible = true
+        }
+
+        @objc func keyboardWillHide() {
+            keyboardVisible = false
         }
 
         func viewForZooming(in scrollView: UIScrollView) -> UIView? {
             host.view
         }
+
+        func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+            lockedX = scrollView.contentOffset.x
+        }
+
+        func scrollViewDidZoom(_ scrollView: UIScrollView) {
+            lockedX = scrollView.contentOffset.x
+        }
+
+        // MARK: THE FIX: BLOCK AUTO-SCROLL HORIZONTAL WHEN KEYBOARD IS VISIBLE
+        func scrollViewDidScroll(_ scrollView: UIScrollView) {
+            guard keyboardVisible else { return }
+
+            // If UIKit tries to move horizontally, revert
+            let dx = abs(scrollView.contentOffset.x - lockedX)
+            if dx > 1 {
+                scrollView.contentOffset.x = lockedX
+            }
+        }
     }
 }
-
