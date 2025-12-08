@@ -89,7 +89,6 @@ struct HomeView: View {
     ) private var funcionarios: FetchedResults<Funcionario>
 
     @State private var funcionario: Funcionario? = nil
-    @State private var mostrandoFormulario = false
     @State private var mostrandoSobreSECID = false
     @State private var mostrandoGraficoFuncionarios = false
     @State private var mostrandoGraficoMunicipios = false
@@ -140,31 +139,18 @@ struct HomeView: View {
                                 // 🔹 Botão Adicionar Funcionário
                                 Button(action: {
                                     selectedRegional = ""
-                                    let f = Funcionario(context: viewContext)
-                                    f.nome = ""
-                                    f.funcao = ""
-                                    f.celular = ""
-                                    f.email = ""
-                                    f.favorito = false
-                                    f.ramal = ""
-                                    f.regional = ""
-                                    self.funcionario = f
-                                    mostrandoFormulario = true
+                                    self.funcionario = criarFuncionarioVazio()
                                 }) {
                                     HomeRow(icon: "person.badge.plus", color: .white, text: "Adicionar Funcionário")
                                 }
-                                .sheet(isPresented: $mostrandoFormulario) {
-                                    if let f = funcionario {
-                                        NavigationView {
-                                            FuncionarioFormView(
-                                                regional: selectedRegional,
-                                                funcionario: f,
-                                                isEditando: false
-                                            )
-                                            .environment(\.managedObjectContext, viewContext)
-                                        }
-                                    } else {
-                                        Text("Erro ao criar funcionário.")
+                                .sheet(item: $funcionario) { funcionarioEmEdicao in
+                                    NavigationView {
+                                        FuncionarioFormView(
+                                            regional: selectedRegional,
+                                            funcionario: funcionarioEmEdicao,
+                                            isEditando: false
+                                        )
+                                        .environment(\.managedObjectContext, viewContext)
                                     }
                                 }
 
@@ -252,6 +238,21 @@ struct HomeView: View {
             }
         }
         .environmentObject(navState)
+    }
+
+    private func criarFuncionarioVazio() -> Funcionario? {
+        guard viewContext.persistentStoreCoordinator != nil else { return nil }
+
+        let funcionario = Funcionario(context: viewContext)
+        funcionario.nome = ""
+        funcionario.funcao = ""
+        funcionario.celular = ""
+        funcionario.email = ""
+        funcionario.favorito = false
+        funcionario.ramal = ""
+        funcionario.regional = ""
+
+        return funcionario
     }
 }
 
