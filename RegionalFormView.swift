@@ -17,6 +17,7 @@ struct RegionalFormView: View {
 
     // Local state to detect if we have prefilled values
     @State private var hasPrefilled = false
+    @State private var isSaving = false
 
     #if DEBUG
     @State private var showPurgeConfirmation = false
@@ -56,7 +57,7 @@ struct RegionalFormView: View {
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Salvar") { saveAndClose() }
-                    .disabled(nome.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(isSaving || nome.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         
     }
@@ -124,13 +125,27 @@ struct RegionalFormView: View {
     }
 
     private func saveAndClose() {
-        do {
-            try save()
-            onSaved?()
-            dismiss()
-        } catch {
-            // In a production app, present an alert; for now, log the error
-            print("[RegionalFormView] Erro ao salvar regional: \(error.localizedDescription)")
+        // Prevent double-taps / re-entrancy
+        if isSaving { return }
+        isSaving = true
+
+        // Perform save on the context's queue to avoid threading issues
+        viewContext.perform {
+            do {
+                try self.save()
+                // Dismiss and callback on main actor
+                Task { @MainActor in
+                    self.onSaved?()
+                    self.dismiss()
+                    self.isSaving = false
+                }
+            } catch {
+                // Log error and re-enable UI on main actor
+                print("[RegionalFormView] Erro ao salvar regional: \(error.localizedDescription)")
+                Task { @MainActor in
+                    self.isSaving = false
+                }
+            }
         }
     }
 

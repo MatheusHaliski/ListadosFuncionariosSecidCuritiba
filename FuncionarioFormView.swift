@@ -34,6 +34,12 @@ struct FuncionarioFormView: View {
     @State private var fotoItem: PhotosPickerItem?
 #endif
 
+    // Lista de todas as regionais disponíveis para seleção
+    private let todasRegionais: [String] = [
+        "Campo Mourão","Cascavel","Curitiba","Guarapuava","Londrina","Maringá",
+        "Pato Branco","Ponta Grossa","Santo Antonio da Platina","União da Vitória","Umuarama"
+    ]
+
     // MARK: - Initializer, seeds state for creation or editing context
     init(regional: String, funcionario: Funcionario, isEditando: Bool, onSaved: (() -> Void)? = nil) {
         self._funcionario = ObservedObject(initialValue: funcionario)
@@ -98,8 +104,11 @@ struct FuncionarioFormView: View {
                     .textInputAutocapitalization(.words)
                 TextField("Cargo", text: $cargoText)
                     .textInputAutocapitalization(.words)
-                TextField("Regional", text: $regionalText)
-                    .textInputAutocapitalization(.words)
+                Picker("Regional", selection: $regionalText) {
+                    ForEach(todasRegionais, id: \.self) { regional in
+                        Text(regional).tag(regional)
+                    }
+                }
             }
 
             // Contact Info Section

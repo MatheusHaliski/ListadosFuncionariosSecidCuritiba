@@ -78,9 +78,21 @@ struct HomeView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.appZoomScale) private var appZoom
 
+    @FetchRequest(
+        sortDescriptors: [],
+        animation: .default
+    ) private var municipios: FetchedResults<Municipio>
+
+    @FetchRequest(
+        sortDescriptors: [],
+        animation: .default
+    ) private var funcionarios: FetchedResults<Funcionario>
+
     @State private var funcionario: Funcionario? = nil
     @State private var mostrandoFormulario = false
     @State private var mostrandoSobreSECID = false
+    @State private var mostrandoGraficoFuncionarios = false
+    @State private var mostrandoGraficoMunicipios = false
     @State private var selectedRegional: String = ""
     @AppStorage("app_zoom_scale") private var persistedZoom: Double = 1.0
     @StateObject var navState = AppNavigationState()
@@ -207,6 +219,34 @@ struct HomeView: View {
                     }
                     .sheet(isPresented: $mostrandoSobreSECID) {
                         SobreSECIDView().appHeaderFooter().appZoomControls()
+                    }
+                }
+
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: { mostrandoGraficoFuncionarios = true }) {
+                        Label("Funcionários x Regionais", systemImage: "chart.bar.xaxis")
+                            .labelStyle(.iconOnly)
+                            .font(.system(size: 22))
+                            .foregroundColor(.blue)
+                    }
+                    .sheet(isPresented: $mostrandoGraficoFuncionarios) {
+                        FuncionariosPorRegionalChartView(funcionarios: Array(funcionarios))
+                            .appHeaderFooter()
+                            .appZoomControls()
+                    }
+                }
+
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: { mostrandoGraficoMunicipios = true }) {
+                        Label("Municípios x Regionais", systemImage: "chart.pie.fill")
+                            .labelStyle(.iconOnly)
+                            .font(.system(size: 22))
+                            .foregroundColor(.blue)
+                    }
+                    .sheet(isPresented: $mostrandoGraficoMunicipios) {
+                        MunicipiosPorRegionalChartView(municipios: Array(municipios))
+                            .appHeaderFooter()
+                            .appZoomControls()
                     }
                 }
             }

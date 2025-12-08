@@ -128,9 +128,7 @@ struct MunicipiosView: View {
             .sheet(isPresented: $mostrandoAnalytics) {
                 MunicipiosAnalyticsView(
                     data: analyticsData,
-                    title: "Municípios por Regional",
-                    xValue: \.regional,
-                    yValue: \.count
+                    title: "Municípios por Regional"
                 )
                 .presentationDetents([.fraction(0.5), .large])
             }

@@ -9,7 +9,7 @@ import SwiftUI
 internal import CoreData
 
 struct RegionalInfoDetailView: View {
-    let regional: RegionalInfo5  // entidade do Core Data
+    @ObservedObject var regional: RegionalInfo5  // entidade do Core Data
     let onEdit: (() -> Void)? = nil
 
     @Environment(\.managedObjectContext) private var viewContext
@@ -110,16 +110,13 @@ struct RegionalInfoDetailView: View {
             NavigationStack {
                 RegionalFormView(
                     regional: regional,
-                    onSaved: {
-                        // Persist any pending changes and provide user feedback without dismissing
+                    onSaved: { @MainActor in
                         do {
                             if viewContext.hasChanges {
                                 try viewContext.save()
-                                viewContext.refresh(regional, mergeChanges: true)
                             }
-                            // Trigger a light UI refresh by toggling a benign state change
-                            withAnimation { _ = regional.objectID }
-                            // Optionally, haptic feedback to signal success
+                            // No manual refresh needed when using @ObservedObject
+                            mostrandoEdicao = false
                             #if os(iOS)
                             let generator = UINotificationFeedbackGenerator()
                             generator.notificationOccurred(.success)
@@ -136,15 +133,12 @@ struct RegionalInfoDetailView: View {
             NavigationStack {
                 RegionalFormView(
                     regional: regional,
-                    onSaved: {
+                    onSaved: { @MainActor in
                         do {
                             if viewContext.hasChanges {
                                 try viewContext.save()
-                                viewContext.refresh(regional, mergeChanges: true)
                             }
-                            // Light UI refresh to reflect changes
-                            withAnimation { _ = regional.objectID }
-                            // Dismiss the municipio edit sheet
+                            // Dismiss the municipio edit sheet safely on main thread
                             mostrandoEdicaoMunicipio = false
                             #if os(iOS)
                             let generator = UINotificationFeedbackGenerator()
@@ -157,6 +151,15 @@ struct RegionalInfoDetailView: View {
                 )
                 .environment(\.managedObjectContext, viewContext)
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextDidSave, object: viewContext)) { _ in
+            // Ensure the observed object merges changes; Core Data with @ObservedObject typically updates automatically
+            // but this helps when edits come from child contexts.
+            viewContext.refresh(regional, mergeChanges: true)
+        }
+        .onChange(of: regional.hasChanges) { _ in
+            // Trigger a minimal state change if needed; usually unnecessary with @ObservedObject
+            _ = regional.objectID
         }
     }
 
@@ -223,3 +226,4 @@ struct RegionalInfoDetailView: View {
     }
     #endif
 }
+
