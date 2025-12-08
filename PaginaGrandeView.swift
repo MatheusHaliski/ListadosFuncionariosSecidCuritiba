@@ -188,6 +188,7 @@ struct PaginaGrandeView: View {
             .frame(width: 1000)
             .background(RoundedRectangle(cornerRadius: 16).fill(.white))
             .overlay(RoundedRectangle(cornerRadius: 16).stroke(.blue.opacity(0.4), lineWidth: 4))
+            .ignoresSafeArea(.keyboard) 
 
             // ---------------------- TABLE + SCROLL ----------------------
             ScrollView(showsIndicators: true) {
@@ -246,14 +247,12 @@ struct CardRowSimple04: View {
                     )
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(funcionario.nome ?? "Sem Nome")
-                        .font(.system(size: 18 * zoom, weight: .semibold))
+                    Text("Nome: \(funcionario.nome ?? "(Sem nome)")")
+                        .font(.headline)
+                    Text("Função: \(funcionario.funcao ?? "")")
+                        .font(.headline)
 
-                    Text(funcionario.funcao ?? "")
-                        .font(.system(size: 14 * zoom))
-                        .foregroundColor(.secondary)
-
-                    Text(funcionario.regional ?? "")
+                    Text("Regional: \(funcionario.regional ?? "")")
                         .font(.system(size: 14 * zoom))
                         .foregroundColor(.blue)
                 }
