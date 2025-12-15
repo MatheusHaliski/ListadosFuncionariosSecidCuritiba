@@ -134,6 +134,47 @@ struct FirestoreMigrator {
 
                     let imageURLString = (data["imageURL"] as? String) ?? (data["imagemURL"] as? String)
                     funcionario.imagemURL = imageURLString
+
+                    // Upsert projetos from Firestore array
+                    if let projetosArr = data["projetos"] as? [[String: Any]] {
+                        // Build a map of existing projetos by (nome + status) as a simple key
+                        let existing: [String: Projeto] = {
+                            let set = (funcionario.value(forKey: "projetos") as? NSSet) ?? []
+                            var dict: [String: Projeto] = [:]
+                            for case let p as Projeto in set {
+                                let key = "\(p.nome ?? "")|\(p.status ?? "")"
+                                dict[key] = p
+                            }
+                            return dict
+                        }()
+
+                        var keep = Set<String>()
+
+                        for projDict in projetosArr {
+                            let nome = (projDict["nome"] as? String) ?? ""
+                            let status = (projDict["status"] as? String) ?? ""
+                            let desc = (projDict["descricao"] as? String)
+                            let key = "\(nome)|\(status)"
+
+                            let p = existing[key] ?? Projeto(context: context)
+                            p.nome = nome
+                            p.status = status
+                            if let desc { p.setValue(desc, forKey: "descricao") }
+                            p.funcionario = funcionario
+                            keep.insert(key)
+                        }
+
+                        // Optionally delete local projetos not present in Firestore
+                        if let set = funcionario.value(forKey: "projetos") as? NSSet {
+                            for case let p as Projeto in set {
+                                let key = "\(p.nome ?? "")|\(p.status ?? "")"
+                                if !keep.contains(key) {
+                                    context.delete(p)
+                                }
+                            }
+                        }
+                    }
+
                     updatedCount += 1
 
                     if let urlStr = imageURLString, let url = URL(string: urlStr) {
@@ -195,6 +236,19 @@ struct FirestoreMigrator {
                 "celular": funcionario.celular ?? "",
                 "email": funcionario.email ?? ""
             ]
+
+            // Serialize projetos into Firestore-friendly array of dictionaries
+            if let projetosSet = funcionario.value(forKey: "projetos") as? NSSet {
+                let projetosArray: [[String: Any]] = projetosSet.compactMap { obj in
+                    guard let p = obj as? Projeto else { return nil }
+                    var dict: [String: Any] = [:]
+                    dict["nome"] = p.nome ?? ""
+                    dict["status"] = p.status ?? ""
+                    if let desc = p.value(forKey: "descricao") as? String { dict["descricao"] = desc }
+                    return dict
+                }
+                data["projetos"] = projetosArray
+            }
 
             func finish() {
                 db.collection("employees").document(uuid).setData(data) { err in
@@ -359,6 +413,43 @@ struct FirestoreMigrator {
                     funcObj.ramal = data["ramal"] as? String
                     funcObj.email = data["email"] as? String
                     funcObj.favorito = data["favorito"] as? Bool ?? false
+
+                    // Upsert projetos from Firestore array
+                    if let projetosArr = data["projetos"] as? [[String: Any]] {
+                        let existing: [String: Projeto] = {
+                            let set = (funcObj.value(forKey: "projetos") as? NSSet) ?? []
+                            var dict: [String: Projeto] = [:]
+                            for case let p as Projeto in set {
+                                let key = "\(p.nome ?? "")|\(p.status ?? "")"
+                                dict[key] = p
+                            }
+                            return dict
+                        }()
+
+                        var keep = Set<String>()
+                        for projDict in projetosArr {
+                            let nome = (projDict["nome"] as? String) ?? ""
+                            let status = (projDict["status"] as? String) ?? ""
+                            let desc = (projDict["descricao"] as? String)
+                            let key = "\(nome)|\(status)"
+
+                            let p = existing[key] ?? Projeto(context: context)
+                            p.nome = nome
+                            p.status = status
+                            if let desc { p.setValue(desc, forKey: "descricao") }
+                            p.funcionario = funcObj
+                            keep.insert(key)
+                        }
+
+                        if let set = funcObj.value(forKey: "projetos") as? NSSet {
+                            for case let p as Projeto in set {
+                                let key = "\(p.nome ?? "")|\(p.status ?? "")"
+                                if !keep.contains(key) {
+                                    context.delete(p)
+                                }
+                            }
+                        }
+                    }
 
                     if let urlStr = data["imageURL"] as? String,
                        let url = URL(string: urlStr) {
@@ -593,4 +684,5 @@ struct FirestoreMigrator {
         }
     }
 }
+
 

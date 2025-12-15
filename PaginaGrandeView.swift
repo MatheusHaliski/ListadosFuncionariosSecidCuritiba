@@ -86,30 +86,7 @@ struct PaginaGrandeView: View {
                 content
             }
             .navigationTitle("Pesquisa de Funcionários")
-#if DEBUG
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(role: .destructive) {
-                        showPurgeConfirmation = true
-                    } label: {
-                        Text("Limpar Tudo")
-                    }
-                    .accessibilityLabel("Limpar todas as regionais")
-                }
-            }
-            .confirmationDialog(
-                "Tem certeza que deseja apagar todas as regionais?",
-                isPresented: $showPurgeConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Apagar Todas", role: .destructive) {
-                    purgeAllFuncionarios()
-                }
-                Button("Cancelar", role: .cancel) { }
-            } message: {
-                Text("Esta ação removerá todas as entradas de Funcionarios do banco de dados.")
-            }
-#endif
+
         }
     }
     public func purgeAllFuncionarios() {
@@ -378,3 +355,4 @@ struct ZoomableScrollView22<Content: View>: UIViewRepresentable {
         }
     }
 }
+

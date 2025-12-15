@@ -310,16 +310,16 @@ struct FuncionarioDetailView: View {
 
     // MARK: - DELETE
     private func deleteFuncionario() {
-        let idString = funcionario.objectID.uriRepresentation().absoluteString
-        // Firebase placeholder
-        print("[Firebase] Deleting Funcionario with id: \(idString)")
-        // Core Data deletion
-        viewContext.delete(funcionario)
-        do {
-            try viewContext.save()
-            dismiss()
-        } catch {
-            print("[Detail] Erro ao deletar funcionário: \(error.localizedDescription)")
+        FirestoreMigrator.deleteFuncionario(objectID: funcionario.objectID, context: viewContext) { result in
+            switch result {
+            case .success:
+                NotificationCenter.default.post(name: .funcionarioAtualizado, object: nil)
+                DispatchQueue.main.async {
+                    dismiss()
+                }
+            case .failure(let error):
+                print("[Detail] Erro ao deletar funcionário (Firestore): \(error.localizedDescription)")
+            }
         }
     }
 

@@ -160,42 +160,6 @@ struct PaginaGrandeView2: View {
                 content
             }
             .navigationTitle("Favoritos")
-#if DEBUG
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(role: .destructive) {
-                        if segmentoSelecionado == .funcionario {
-                            showFuncionariosPurgeConfirmation = true
-                        } else {
-                            showMunicipiosPurgeConfirmation = true
-                        }
-                    } label: {
-                        Text("Limpar Tudo")
-                    }
-                    .accessibilityLabel("Limpar todas as regionais")
-                }
-            }
-            .confirmationDialog(
-                "Deseja deletar a tabela de funcionarios?",
-                isPresented: $showFuncionariosPurgeConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Apagar Tabela de Funcionários", role: .destructive) {
-                    purgeAllFuncionarios()
-                }
-                Button("Cancelar", role: .cancel) { }
-            }
-            .confirmationDialog(
-                "Deseja deletar a tabela de municipio?",
-                isPresented: $showMunicipiosPurgeConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Apagar Tabela de Municípios", role: .destructive) {
-                    purgeAllMunicipios()
-                }
-                Button("Cancelar", role: .cancel) { }
-            }
-#endif
         }
     }
 
@@ -284,13 +248,6 @@ struct PaginaGrandeView2: View {
                         LazyVStack(spacing: 0) {
                             ForEach(filteredFuncionarios, id: \.objectID) { funcionario in
                                 CardRowSimple11(funcionario: funcionario, zoom: zoom)
-                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                        Button(role: .destructive) {
-                                            deleteFuncionario(funcionario)
-                                        } label: {
-                                            Label("Deletar", systemImage: "trash")
-                                        }
-                                    }
                             }
                         }
                         .padding(.vertical, 8)
@@ -330,13 +287,6 @@ struct PaginaGrandeView2: View {
                                     )
                                 }
                                 .buttonStyle(.plain)
-                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                    Button(role: .destructive) {
-                                        deleteMunicipio(municipio)
-                                    } label: {
-                                        Label("Deletar", systemImage: "trash")
-                                    }
-                                }
                             }
 
                         }
@@ -575,3 +525,4 @@ struct ZoomableScrollView23<Content: View>: UIViewRepresentable {
         }
     }
 }
+
