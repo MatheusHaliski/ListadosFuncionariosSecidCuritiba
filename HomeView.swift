@@ -361,4 +361,3 @@ struct ZoomableScrollView3<Content: View>: UIViewRepresentable {
         }
     }
 }
-
