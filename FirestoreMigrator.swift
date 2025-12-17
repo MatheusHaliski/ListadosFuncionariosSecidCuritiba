@@ -23,12 +23,10 @@ struct FirestoreMigrator {
     private static var storage: StorageReference { Storage.storage().reference() }
     
     // Firestore structure (device-scoped by installID):
-    // employees (collection)
-    //  └─ devices (collection)
-    //      └─ {deviceID} (collection of employee docs owned by this device)
-    // municipios (collection)
-    //  └─ devices (collection)
-    //      └─ {deviceID} (collection of municipio docs owned by this device)
+    // installids (collection)
+    //  └─ {deviceID} (document)
+    //      ├─ employees (subcollection of employee docs for this install)
+    //      └─ municipios (subcollection of municipio docs for this install)
     // MARK: - Device-scoped paths
     private static var deviceID: String {
         // Per-install identifier: new UUID on first launch, persists in UserDefaults.
@@ -42,14 +40,19 @@ struct FirestoreMigrator {
         return gen
     }
 
+    private static var deviceDocument: DocumentReference {
+        // Structure: installids/{deviceID}
+        db.collection("installids").document(deviceID)
+    }
+
     private static var employeesDeviceCollection: CollectionReference {
-        // Structure: employees/devices/{deviceID}
-        db.collection("employees").document("devices").collection(deviceID)
+        // Structure: installids/{deviceID}/employees
+        deviceDocument.collection("employees")
     }
 
     private static var municipiosDeviceCollection: CollectionReference {
-        // Structure: municipios/devices/{deviceID}
-        db.collection("municipios").document("devices").collection(deviceID)
+        // Structure: installids/{deviceID}/municipios
+        deviceDocument.collection("municipios")
     }
 
     // MARK: - Helpers
