@@ -5,6 +5,7 @@
 //  Created by ChatGPT on 2025-12-04.
 //  Totalmente reconstruído para segurança e estabilidade.
 //
+// NOTE: We mirror the Core Data UUID into Firestore field 'uuid' for stability and backward compatibility. DocumentID may differ or be legacy.
 
 import Foundation
 internal import CoreData
@@ -12,12 +13,44 @@ import FirebaseFirestore
 import FirebaseStorage
 import SDWebImage
 import SDWebImageSwiftUI
+import UIKit
+
 
 struct FirestoreMigrator {
 
     // MARK: - Shared Instances
     private static var db: Firestore { Firestore.firestore() }
     private static var storage: StorageReference { Storage.storage().reference() }
+    
+    // Firestore structure (device-scoped by installID):
+    // employees (collection)
+    //  └─ devices (collection)
+    //      └─ {deviceID} (collection of employee docs owned by this device)
+    // municipios (collection)
+    //  └─ devices (collection)
+    //      └─ {deviceID} (collection of municipio docs owned by this device)
+    // MARK: - Device-scoped paths
+    private static var deviceID: String {
+        // Per-install identifier: new UUID on first launch, persists in UserDefaults.
+        // Deleting the app removes this ID, producing a new bucket on reinstall.
+        let key = "FirestoreMigrator.InstallID"
+        if let saved = UserDefaults.standard.string(forKey: key) {
+            return saved
+        }
+        let gen = UUID().uuidString
+        UserDefaults.standard.set(gen, forKey: key)
+        return gen
+    }
+
+    private static var employeesDeviceCollection: CollectionReference {
+        // Structure: employees/devices/{deviceID}
+        db.collection("employees").document("devices").collection(deviceID)
+    }
+
+    private static var municipiosDeviceCollection: CollectionReference {
+        // Structure: municipios/devices/{deviceID}
+        db.collection("municipios").document("devices").collection(deviceID)
+    }
 
     // MARK: - Helpers
     private static func safeID(from raw: String) -> String {
@@ -50,7 +83,16 @@ struct FirestoreMigrator {
     // Wipe all employees (and their images) from Firestore for clean Xcode runs
     static func wipeFuncionariosInFirestore() async {
         do {
-            try await deleteAllDocuments(in: "employees")
+            // Delete device-scoped employees: employees/devices/{deviceID}
+            let snapshot = try await employeesDeviceCollection.getDocuments()
+            let batch = db.batch()
+            for doc in snapshot.documents { batch.deleteDocument(doc.reference) }
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                batch.commit { err in
+                    if let err = err { continuation.resume(throwing: err) }
+                    else { continuation.resume(returning: ()) }
+                }
+            }
             // Also remove all images in the employeeImages folder (best-effort)
             await wipeEmployeeImagesFolder()
             print("[Wipe] Firestore employees and images wiped.")
@@ -60,7 +102,7 @@ struct FirestoreMigrator {
     }
 
     private static func wipeEmployeeImagesFolder() async {
-        let storageRef = Storage.storage().reference().child("employeeImages")
+        let storageRef = Storage.storage().reference().child("employeeImages/\(deviceID)")
         do {
             let result = try await storageRef.listAll()
             for item in result.items {
@@ -71,11 +113,28 @@ struct FirestoreMigrator {
         }
     }
 
+    // Wipe all municipios for this device from Firestore for clean Xcode runs
+    static func wipeMunicipiosInFirestore() async {
+        do {
+            let snapshot = try await municipiosDeviceCollection.getDocuments()
+            let batch = db.batch()
+            for doc in snapshot.documents { batch.deleteDocument(doc.reference) }
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                batch.commit { err in
+                    if let err = err { continuation.resume(throwing: err) }
+                    else { continuation.resume(returning: ()) }
+                }
+            }
+            print("[Wipe] Firestore municipios wiped.")
+        } catch {
+            print("[Wipe] Failed to wipe Firestore municipios: \(error)")
+        }
+    }
+
     // Download from Firestore to Core Data (including image)
     // We now do protective upserts to avoid duplicates when syncing.
     static func syncFromFirestoreToCoreData(context: NSManagedObjectContext, completion: @escaping (Result<Int, Error>) -> Void) {
-        let db = Firestore.firestore()
-        db.collection("employees").getDocuments { snapshot, error in
+        employeesDeviceCollection.getDocuments { snapshot, error in
             guard let documents = snapshot?.documents, error == nil else {
                 completion(.failure(error ?? NSError(domain: "Firestore", code: -1)))
                 return
@@ -86,7 +145,7 @@ struct FirestoreMigrator {
             for doc in documents {
                 group.enter()
                 let data = doc.data()
-                let idStr = doc.documentID
+                let idStr = (data["uuid"] as? String) ?? doc.documentID
 
                 context.perform {
                     // Normalize document ID to a UUID when possible
@@ -119,8 +178,11 @@ struct FirestoreMigrator {
                     if let uuid = uuidFromDoc {
                         funcionario.id = uuid
                     } else if funcionario.id == nil {
-                        // If Firestore doc id is not a UUID and the local record has no id yet, assign one
-                        funcionario.id = UUID()
+                        // If Firestore doesn't provide a valid UUID, generate one and mirror it back
+                        let newUUID = UUID()
+                        funcionario.id = newUUID
+                        // Persist back to Firestore for stability
+                        employeesDeviceCollection.document(doc.documentID).setData(["uuid": newUUID.uuidString], merge: true)
                     }
 
                     // Set fields after finding or creating the record
@@ -226,7 +288,18 @@ struct FirestoreMigrator {
                     userInfo: [NSLocalizedDescriptionKey: "Funcionario missing UUID"])))
             }
 
+            // Normalize display name: take the part after a vertical bar, similar to FuncionarioDetailView trimming
+            let rawName = funcionario.nome ?? ""
+            let displayNameClean: String = {
+                let parts = rawName.split(separator: "|", maxSplits: 1, omittingEmptySubsequences: false)
+                if let last = parts.last {
+                    return String(last).trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                return rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+            }()
+
             var data: [String: Any] = [
+                "uuid": uuid,
                 "nome": funcionario.nome ?? "",
                 "funcao": funcionario.funcao ?? "",
                 "cargo": funcionario.funcao ?? "",
@@ -234,7 +307,8 @@ struct FirestoreMigrator {
                 "regional": funcionario.regional ?? "",
                 "ramal": funcionario.ramal ?? "",
                 "celular": funcionario.celular ?? "",
-                "email": funcionario.email ?? ""
+                "email": funcionario.email ?? "",
+                "displayName": displayNameClean
             ]
 
             // Serialize projetos into Firestore-friendly array of dictionaries
@@ -251,7 +325,7 @@ struct FirestoreMigrator {
             }
 
             func finish() {
-                db.collection("employees").document(uuid).setData(data) { err in
+                employeesDeviceCollection.document(uuid).setData(data) { err in
                     if let err = err { completion(.failure(err)) }
                     else { completion(.success(())) }
                 }
@@ -259,7 +333,7 @@ struct FirestoreMigrator {
 
             // Upload image if exists
             if let imageData = funcionario.imagem {
-                let ref = storage.child("employeeImages/\(uuid).jpg")
+                let ref = storage.child("employeeImages/\(deviceID)/\(uuid).jpg")
                 let meta = StorageMetadata()
                 meta.contentType = "image/jpeg"
 
@@ -302,10 +376,10 @@ struct FirestoreMigrator {
                     userInfo: [NSLocalizedDescriptionKey: "Missing UUID"])))
             }
 
-            db.collection("employees").document(uuid).delete { err in
+            employeesDeviceCollection.document(uuid).delete { err in
                 if let err = err { return completion(.failure(err)) }
 
-                storage.child("employeeImages/\(uuid).jpg").delete { _ in }
+                storage.child("employeeImages/\(deviceID)/\(uuid).jpg").delete { _ in }
 
                 context.perform {
                     context.delete(funcionario)
@@ -375,8 +449,7 @@ struct FirestoreMigrator {
         context: NSManagedObjectContext,
         completion: @escaping (Result<Int, Error>) -> Void
     ) {
-
-        db.collection("employees").getDocuments { snapshot, err in
+        employeesDeviceCollection.getDocuments { snapshot, err in
             guard let docs = snapshot?.documents, err == nil else {
                 return completion(.failure(err ?? NSError()))
             }
@@ -386,9 +459,11 @@ struct FirestoreMigrator {
 
             for doc in docs {
                 group.enter()
+
                 let data = doc.data()
                 let docID = doc.documentID
-                let uuid = UUID(uuidString: docID)
+                let uuidString = (data["uuid"] as? String) ?? docID
+                let uuid = UUID(uuidString: uuidString)
 
                 context.perform {
 
@@ -404,7 +479,16 @@ struct FirestoreMigrator {
                     let existing = (try? context.fetch(request))?.first
                     let funcObj = existing ?? Funcionario(context: context)
 
-                    if funcObj.id == nil, let uuid { funcObj.id = uuid }
+                    if funcObj.id == nil {
+                        if let uuid {
+                            funcObj.id = uuid
+                        } else {
+                            // No valid UUID found; generate one and mirror it back to Firestore
+                            let newUUID = UUID()
+                            funcObj.id = newUUID
+                            employeesDeviceCollection.document(docID).setData(["uuid": newUUID.uuidString], merge: true)
+                        }
+                    }
 
                     funcObj.nome = data["nome"] as? String
                     funcObj.funcao = data["funcao"] as? String
@@ -480,7 +564,7 @@ struct FirestoreMigrator {
     }
 
     // MARK: --------------------------------------------------------------------
-    // MARK: - MUNICIPIOS (UPLOAD / DELETE / SYNC)
+    // MARK: - MUNICIPIOS (device-scoped: municipios/devices/{deviceID})
     // MARK: --------------------------------------------------------------------
 
     static func uploadMunicipio(
@@ -504,12 +588,13 @@ struct FirestoreMigrator {
             let docId = uuid.uuidString
 
             let data: [String: Any] = [
+                "uuid": docId,
                 "nome": municipio.nome ?? "",
                 "regional": municipio.regional ?? "",
                 "favorito": municipio.favorito
             ]
 
-            db.collection("municipios").document(docId).setData(data) { err in
+            municipiosDeviceCollection.document(docId).setData(data) { err in
                 if let err = err { completion(.failure(err)) }
                 else { completion(.success(())) }
             }
@@ -536,13 +621,53 @@ struct FirestoreMigrator {
 
             let docId = uuid.uuidString
 
-            db.collection("municipios").document(docId).delete { err in
+            municipiosDeviceCollection.document(docId).delete { err in
                 if let err = err { return completion(.failure(err)) }
 
                 context.perform {
                     context.delete(municipio)
                     do { try context.save(); completion(.success(())) }
                     catch { completion(.failure(error)) }
+                }
+            }
+        }
+    }
+
+    /// Updates the favorito flag for a Municipio both locally and in Firestore.
+    /// Prints a detail log on success so you can verify in the console.
+    static func updateMunicipioFavorito(
+        objectID: NSManagedObjectID,
+        favorito: Bool,
+        context: NSManagedObjectContext,
+        completion: ((Result<Void, Error>) -> Void)? = nil
+    ) {
+        context.perform {
+            guard let municipio = try? context.existingObject(with: objectID) as? Municipio else {
+                completion?(.failure(NSError(domain: "Migrator", code: -14, userInfo: [NSLocalizedDescriptionKey: "Municipio not found"])));
+                return
+            }
+
+            guard let uuid = (municipio.id as? UUID) ?? (municipio.id as? NSUUID as UUID?) else {
+                completion?(.failure(NSError(domain: "Migrator", code: -15, userInfo: [NSLocalizedDescriptionKey: "Missing Municipio UUID"])));
+                return
+            }
+
+            // Update local first
+            municipio.favorito = favorito
+
+            do { try context.save() } catch {
+                completion?(.failure(error));
+                return
+            }
+
+            // Push to Firestore (device scoped) and log on success
+            let docId = uuid.uuidString
+            municipiosDeviceCollection.document(docId).setData(["favorito": favorito, "uuid": docId], merge: true) { err in
+                if let err = err {
+                    completion?(.failure(err))
+                } else {
+                    print("[Detail] Municipio (\(docId)) - Favorito atualizado")
+                    completion?(.success(()))
                 }
             }
         }
@@ -555,7 +680,7 @@ struct FirestoreMigrator {
         completion: @escaping (Result<Int, Error>) -> Void
     ) {
 
-        db.collection("municipios").getDocuments { snapshot, err in
+        municipiosDeviceCollection.getDocuments { snapshot, err in
             guard let docs = snapshot?.documents, err == nil else {
                 return completion(.failure(err ?? NSError()))
             }
@@ -568,7 +693,8 @@ struct FirestoreMigrator {
 
                 let data = doc.data()
                 let docId = doc.documentID
-                let uuid = UUID(uuidString: docId)
+                let uuidString = (data["uuid"] as? String) ?? docId
+                let uuid = UUID(uuidString: uuidString)
 
                 context.perform {
 
@@ -584,7 +710,15 @@ struct FirestoreMigrator {
                     let existing = (try? context.fetch(request))?.first
                     let municipio = existing ?? Municipio(context: context)
 
-                    if municipio.id == nil, let uuid { municipio.id = uuid as NSUUID as UUID }
+                    if municipio.id == nil {
+                        if let uuid {
+                            municipio.id = uuid as NSUUID as UUID
+                        } else {
+                            let newUUID = UUID()
+                            municipio.id = newUUID as NSUUID as UUID
+                            municipiosDeviceCollection.document(docId).setData(["uuid": newUUID.uuidString], merge: true)
+                        }
+                    }
 
                     municipio.nome = data["nome"] as? String
                     municipio.regional = data["regional"] as? String
@@ -655,6 +789,48 @@ struct FirestoreMigrator {
         }
     }
     
+    // MARK: --------------------------------------------------------------------
+    // MARK: - HOUSEKEEPING: PURGE UNNAMED FUNCIONARIOS
+    // MARK: --------------------------------------------------------------------
+
+    /// Deletes any Funcionario rows whose `nome` is exactly "(Sem nome)".
+    /// Call this before fetching to ensure the list doesn't show placeholder entries.
+    /// - Parameters:
+    ///   - context: The NSManagedObjectContext to operate on.
+    ///   - completion: Completion with the number of deleted rows or an error.
+    static func purgeUnnamedFuncionarios(
+        context: NSManagedObjectContext,
+        completion: @escaping (Result<Int, Error>) -> Void
+    ) {
+        context.perform {
+            do {
+                let request: NSFetchRequest<Funcionario> = Funcionario.fetchRequest()
+                request.predicate = NSPredicate(format: "nome == nil OR nome == '' OR nome == %@", "(Sem nome)")
+                let results = try context.fetch(request)
+                let deleteCount = results.count
+
+                for obj in results { context.delete(obj) }
+                if context.hasChanges { try context.save() }
+
+                completion(.success(deleteCount))
+            } catch {
+                completion(.failure(error))
+            }
+        }
+    }
+
+    /// Async/await convenience wrapper for purging unnamed funcionarios.
+    @discardableResult
+    static func purgeUnnamedFuncionariosAsync(
+        context: NSManagedObjectContext
+    ) async throws -> Int {
+        try await withCheckedThrowingContinuation { continuation in
+            purgeUnnamedFuncionarios(context: context) { result in
+                continuation.resume(with: result)
+            }
+        }
+    }
+
     // MARK: - SDWebImage-backed image storage helper
     fileprivate enum SDImageStorage {
         static func downloadImage(from url: URL, completion: @escaping (Result<Data, Error>) -> Void) {
@@ -683,6 +859,85 @@ struct FirestoreMigrator {
             task.resume()
         }
     }
-}
 
+    // MARK: --------------------------------------------------------------------
+    // MARK: - HOUSEKEEPING: SANITIZE EMPLOYEES ROOT (keep only 'devices')
+    // MARK: --------------------------------------------------------------------
+
+    /// Ensures the Firestore collection `employees` contains only the document `devices` at its root.
+    /// Deletes any stray documents with random IDs that may have been created by legacy code.
+    /// - Parameter completion: Result with number of deleted docs or an error.
+    static func sanitizeEmployeesRoot(completion: @escaping (Result<Int, Error>) -> Void) {
+        let employeesRoot = db.collection("employees")
+        employeesRoot.getDocuments { snapshot, error in
+            if let error = error {
+                return completion(.failure(error))
+            }
+            guard let docs = snapshot?.documents else {
+                return completion(.success(0))
+            }
+
+            let batch = db.batch()
+            var deleteCount = 0
+
+            for doc in docs {
+                if doc.documentID != "devices" {
+                    batch.deleteDocument(doc.reference)
+                    deleteCount += 1
+                }
+            }
+
+            if deleteCount == 0 {
+                return completion(.success(0))
+            }
+
+            batch.commit { err in
+                if let err = err { completion(.failure(err)) }
+                else { completion(.success(deleteCount)) }
+            }
+        }
+    }
+
+    /// Async/await variant of sanitizeEmployeesRoot.
+    @discardableResult
+    static func sanitizeEmployeesRootAsync() async throws -> Int {
+        try await withCheckedThrowingContinuation { continuation in
+            sanitizeEmployeesRoot { result in
+                continuation.resume(with: result)
+            }
+        }
+    }
+
+    /// Helper to expose a Municipio's UUID as String for UI (Details view)
+    static func municipioUUIDString(_ municipio: Municipio) -> String? {
+        if let u = municipio.id as? UUID { return u.uuidString }
+        if let u = municipio.id as? NSUUID { return (u as UUID).uuidString }
+        return nil
+    }
+
+    // MARK: --------------------------------------------------------------------
+    // MARK: - STARTUP SCHEDULER: DELAYED SANITIZATION
+    // MARK: --------------------------------------------------------------------
+
+    /// Schedules a one-time sanitization of the employees root a few seconds after app start.
+    /// Use this after you kick off your initial migrations/population so stray legacy docs
+    /// that appear slightly later can be cleaned up.
+    /// - Parameter delaySeconds: How long to wait before running. Default 8 seconds.
+    static func schedulePostStartupSanitization(delaySeconds: TimeInterval = 8) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delaySeconds) {
+            Task {
+                do {
+                    let removed = try await sanitizeEmployeesRootAsync()
+                    if removed > 0 {
+                        print("[Sanitize] Removed stray employees root docs: \(removed)")
+                    } else {
+                        print("[Sanitize] No stray employees root docs found.")
+                    }
+                } catch {
+                    print("[Sanitize] Failed to sanitize employees root: \(error)")
+                }
+            }
+        }
+    }
+}
 
