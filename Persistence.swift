@@ -76,6 +76,12 @@ struct PersistenceController {
                 let vm = FuncionarioViewModel(context: viewContext)
                 vm.popularNucleos(context: viewContext)
             }
+
+            // Ensure Municipio defaults are seeded at least once in production/TestFlight builds.
+            // The data is bundled in `MunicipioViewModel` and does not depend on Xcode-only resets.
+            // This keeps "Ver Municípios" populated even when the app is installed outside Xcode.
+            let municipioVM = MunicipioViewModel(context: container.viewContext)
+            municipioVM.popularMunicipiosSeNecessario()
         }
 
         // Assign to the stored property only after configuration
