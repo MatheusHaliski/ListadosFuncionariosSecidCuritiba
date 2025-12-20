@@ -14,6 +14,7 @@ import FirebaseStorage
 import SDWebImage
 import SDWebImageSwiftUI
 import UIKit
+import SwiftUI
 
 
 struct FirestoreMigrator {
@@ -21,14 +22,14 @@ struct FirestoreMigrator {
     // MARK: - Shared Instances
     private static var db: Firestore { Firestore.firestore() }
     private static var storage: StorageReference { Storage.storage().reference() }
-    
+
     // Firestore structure (device-scoped by installID):
     // installids (collection)
     //  └─ {deviceID} (document)
     //      ├─ employees (subcollection of employee docs for this install)
     //      └─ municipios (subcollection of municipio docs for this install)
     // MARK: - Device-scoped paths
-    private static var deviceID: String {
+    public static var deviceID: String {
         // Per-install identifier: new UUID on first launch, persists in UserDefaults.
         // Deleting the app removes this ID, producing a new bucket on reinstall.
         let key = "FirestoreMigrator.InstallID.\(Bundle.main.bundleIdentifier ?? "unknown")"
@@ -54,17 +55,56 @@ struct FirestoreMigrator {
         // Structure: installids/{deviceID}/municipios
         deviceDocument.collection("municipios")
     }
-
+    private static var inforegionaisDeviceCollection: CollectionReference {
+        // Structure: installids/{deviceID}/municipios
+        deviceDocument.collection("inforegionais")
+    }
     // MARK: - Helpers
     private static func safeID(from raw: String) -> String {
         raw.replacingOccurrences(of: "/", with: "_")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    // MARK: --------------------------------------------------------------------
-    // MARK: - DELETE ALL DOCUMENTS (ASYNC) - USED BY AppDataResetter
-    // MARK: --------------------------------------------------------------------
-
+    static func syncMunicipios(context: NSManagedObjectContext) async {
+        // Usar API baseada em completion em vez de try/await para remover warnings
+        FirestoreMigrator.syncMunicipiosFromFirestore(context: context) { result in
+            switch result {
+            case .success:
+                context.perform {
+                    do {
+                        if context.hasChanges {
+                            try context.save()
+                        }
+                    } catch {
+                        print("[syncMunicipios] Erro ao salvar contexto após sync: \(error.localizedDescription)")
+                    }
+                }
+                print("[syncMunicipios] Sincronização from path installids/{deviceID}/municipios concluída com sucesso.")
+            case .failure(let error):
+                print("[syncMunicipios] Falha ao sincronizar do Firebase, mantendo dados locais do Core Data: \(error.localizedDescription)")
+            }
+        }
+    }
+    static func syncInfoRegionais(context: NSManagedObjectContext) async {
+        // Usar API baseada em completion em vez de try/await para remover warnings
+        FirestoreMigrator.syncInfoRegionaisFromFirestore(context: context) { result in
+            switch result {
+            case .success:
+                context.perform {
+                    do {
+                        if context.hasChanges {
+                            try context.save()
+                        }
+                    } catch {
+                        print("[syncMunicipios] Erro ao salvar contexto após sync: \(error.localizedDescription)")
+                    }
+                }
+                print("[syncMunicipios] Sincronização from path installids/{deviceID}/inforegionais concluída com sucesso.")
+            case .failure(let error):
+                print("[syncMunicipios] Falha ao sincronizar do Firebase, mantendo dados locais do Core Data: \(error.localizedDescription)")
+            }
+        }
+    }
     static func deleteAllDocuments(in collectionName: String) async throws {
         let snapshot = try await db.collection(collectionName).getDocuments()
         let batch = db.batch()
@@ -657,6 +697,70 @@ struct FirestoreMigrator {
                     }
 
                     // Map fields safely
+                    if let nome = data["nome"] as? String { regional.setValue(nome, forKey: "nome") }
+                    if let chefe = data["chefe"] as? String { regional.setValue(chefe, forKey: "chefe") }
+                    if let ramal = data["ramal"] as? String { regional.setValue(ramal, forKey: "ramal") }
+                    if let endereco = data["endereco"] as? String { regional.setValue(endereco, forKey: "endereco") }
+
+                    updated += 1
+                }
+
+                do { try context.save(); completion(.success(updated)) }
+                catch { completion(.failure(error)) }
+            }
+        }
+    }
+
+    /// Async wrapper to sync regional info documents (collection: installids/{deviceID}/inforegionais)
+    /// into Core Data entity `InfoRegionais5`.
+    /// - Returns: Number of upserted/updated rows.
+    @discardableResult
+    static func syncInfoRegionais(context: NSManagedObjectContext) async throws -> Int {
+        try await withCheckedThrowingContinuation { continuation in
+            syncInfoRegionaisFromFirestore(context: context) { result in
+                continuation.resume(with: result)
+            }
+        }
+    }
+
+    /// Completion-based sync of regional info (Firestore -> Core Data) targeting entity `InfoRegionais5`.
+    static func syncInfoRegionaisFromFirestore(
+        context: NSManagedObjectContext,
+        completion: @escaping (Result<Int, Error>) -> Void
+    ) {
+        regionalInfoDeviceCollection.getDocuments { snapshot, error in
+            guard let docs = snapshot?.documents, error == nil else {
+                completion(.failure(error ?? NSError(domain: "Firestore", code: -1)))
+                return
+            }
+
+            var updated = 0
+            context.perform {
+                for doc in docs where doc.documentID != "inforegionais" {
+                    let data = doc.data()
+
+                    // Prepare a fetch for InfoRegionais5 using best-effort unique keys
+                    let fetch = NSFetchRequest<NSFetchRequestResult>(entityName: "InfoRegionais5")
+                    fetch.fetchLimit = 1
+
+                    if let nome = data["nome"] as? String, let ramal = data["ramal"] as? String {
+                        fetch.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+                            NSPredicate(format: "nome == %@", nome),
+                            NSPredicate(format: "ramal == %@", ramal)
+                        ])
+                    } else if let nome = data["nome"] as? String {
+                        fetch.predicate = NSPredicate(format: "nome == %@", nome)
+                    } else {
+                        fetch.predicate = nil
+                    }
+
+                    let regional: NSManagedObject
+                    if let existing = try? context.fetch(fetch).first as? NSManagedObject {
+                        regional = existing
+                    } else {
+                        regional = NSEntityDescription.insertNewObject(forEntityName: "InfoRegionais5", into: context)
+                    }
+
                     if let nome = data["nome"] as? String { regional.setValue(nome, forKey: "nome") }
                     if let chefe = data["chefe"] as? String { regional.setValue(chefe, forKey: "chefe") }
                     if let ramal = data["ramal"] as? String { regional.setValue(ramal, forKey: "ramal") }
