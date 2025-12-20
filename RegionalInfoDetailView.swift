@@ -79,13 +79,13 @@ struct RegionalInfoDetailView: View {
             if let ramal = regional.ramal { data["ramal"] = ramal }
             if let endereco = regional.endereco { data["endereco"] = endereco }
             data["updatedAt"] = FieldValue.serverTimestamp()
-            let id: String
-            if let remoteID = regional.value(forKey: "remoteID") as? String, !remoteID.isEmpty {
-                id = remoteID
+            var documentID: String
+            if let remoteID = regional.value(forKey: "id") as? String, !remoteID.isEmpty {
+                documentID = remoteID
             } else {
-                id = firestoreSafeID(for: regional.objectID)
+                documentID = firestoreSafeID(for: regional.objectID)
             }
-            FirestoreMigrator.upsertRegionalInfo(id: id, data: data, completion: nil)
+            FirestoreMigrator.upsertRegionalInfo(id: documentID, data: data, completion: nil)
             #endif
         }
         .background(Color(.systemBackground))

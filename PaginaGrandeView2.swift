@@ -343,44 +343,53 @@ struct PaginaGrandeView2: View {
     }
 #endif
 }
+
+// Extract only the part after the first vertical bar ("|")
+private func afterPipe(_ value: String?) -> String {
+    guard let value = value, !value.isEmpty else { return "" }
+    if let range = value.range(of: "|") {
+        let after = value[range.upperBound...]
+        return String(after).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    return value.trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
 // MARK: - SIMPLE CARD ROW (standalone)
 struct CardRowSimple11: View {
     @ObservedObject var funcionario: Funcionario
     let zoom: CGFloat
+
+    // Extract only the part after the first vertical bar ("|")
+    private func afterPipe(_ value: String?) -> String {
+        guard let value = value, !value.isEmpty else { return "" }
+        if let range = value.range(of: "|") {
+            let after = value[range.upperBound...]
+            return String(after).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var displayNome: String {  afterPipe(funcionario.nome) }
+    private var displayFuncao: String { afterPipe(funcionario.funcao) }
+    private var displayRegional: String { afterPipe(funcionario.regional) }
+
     private var profileImage: some View {
-        Group {
-            if let urlString = funcionario.imagemURL, let url = URL(string: urlString) {
-                WebImage(url: url) { image in
-                    image
-                        .resizable()
-                        .scaledToFill()
-                } placeholder: {
-                    ZStack {
-                        Circle().fill(Color(.systemGray5))
-                        Text(String(parseName(funcionario.nome).first ?? "F"))
-                            .font(.system(size: 22 * zoom))
-                            .foregroundColor(.primary)
-                    }
-                }
-                .onFailure { error in
-                    print("[WebImage] failed: \(error.localizedDescription)")
-                }
-            } else if let data = funcionario.imagem,
-                      let uiImage = UIImage(data: data) {
+        ZStack {
+            if let data = funcionario.imagem,
+               let uiImage = UIImage(data: data) {
                 Image(uiImage: uiImage)
                     .resizable()
                     .scaledToFill()
             } else {
-                ZStack {
-                    Circle().fill(Color(.systemGray5))
-                    Text(String(funcionario.nome?.first ?? "F"))
-                        .font(.system(size: 22 * zoom))
-                        .foregroundColor(.primary)
-                }
+                Circle().fill(Color(.systemGray5))
+                Text(String((displayNome.first ?? "F")))
+                    .font(.system(size: 22 * zoom))
+                    .foregroundColor(.primary)
             }
         }
         .clipShape(Circle())
     }
+
     var body: some View {
         HStack(spacing: 16) {
 
@@ -396,11 +405,12 @@ struct CardRowSimple11: View {
                     )
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Nome: \(parseName(funcionario.nome ?? "(Sem nome)"))")
+                    Text("Nome: \(displayNome.isEmpty ? "NotIdentified" : displayNome)")
                         .font(.headline)
-                    Text("Função: \(funcionario.funcao ?? "")")
+                    Text("Função: \(displayFuncao)")
                         .font(.headline)
-                    Text("Regional: \(funcionario.regional ?? "")")
+
+                    Text("Regional: \(displayRegional)")
                         .font(.system(size: 14 * zoom))
                         .foregroundColor(.blue)
                 }
@@ -420,14 +430,7 @@ struct CardRowSimple11: View {
         )
     }
 }
-// MARK: - NAME PARSING
-private func parseName(_ raw: String?) -> String {
-    let value = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "(Sem nome)"
-    // Split by vertical bar and take the substring after the last bar, if any
-    let parts = value.split(separator: "|", omittingEmptySubsequences: false)
-    let trimmed = (parts.last.map(String.init) ?? value).trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.isEmpty ? "(Sem nome)" : trimmed
-}
+
 
 // MARK: - ZOOMABLE SCROLLVIEW WITH KEYBOARD AUTO-SCROLL BLOCKER
 struct ZoomableScrollView23<Content: View>: UIViewRepresentable {

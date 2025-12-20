@@ -452,7 +452,7 @@ extension FuncionarioViewModel {
         for (nome, funcao) in lista {
             let novo = Funcionario(context: context)
             novo.id = UUID() // sempre um novo UUID por instalação
-            novo.nome = "\(Self.installID) | \(nome)"
+            novo.nome = "\(nome)"
             // Note: We prefix the name with the per-install installID so we can filter locally without schema changes.
             novo.funcao = funcao
             novo.regional = nomeRegional
@@ -475,7 +475,7 @@ extension FuncionarioViewModel {
 
     func popularRegionaisInfo(context: NSManagedObjectContext) {
 
-        let request = NSFetchRequest<NSFetchRequestResult>(entityName: "RegionalInfo5")
+        _ = NSFetchRequest<NSFetchRequestResult>(entityName: "RegionalInfo5")
 
         print("🔹 Populando tabela RegionalInfo5 com endereço, chefe e ramal...")
         // NOVA ESTRUTURA COMPLETA
@@ -591,7 +591,6 @@ extension FuncionarioViewModel {
             obj.setValue(chefe, forKey: "chefe")
             obj.setValue(ramal, forKey: "ramal")
             obj.setValue(endereco, forKey: "endereco")
-            obj.setValue(UUID(), forKey: "remoteID")
         }
 
         do {

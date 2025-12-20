@@ -440,7 +440,7 @@ class MunicipioViewModel: ObservableObject {
                 "SAO MATEUS DO SUL": "UNIÃO DA VITÓRIA",
                 "UNIAO DA VITORIA": "UNIÃO DA VITÓRIA"
             ]
-
+            
             let nomesMunicipios = [
                 "ALTAMIRA DO PARANA",
                 "ARARUNA",
@@ -842,25 +842,25 @@ class MunicipioViewModel: ObservableObject {
                 "SAO MATEUS DO SUL",
                 "UNIAO DA VITORIA"
             ]
-
+            
             for nome in nomesMunicipios {
                 // Normalize for lookup
                 let chaveNormalizada = nome
                     .uppercased()
                     .folding(options: .diacriticInsensitive, locale: .current)
-
+                
                 // Try to find existing municipio by name (case/diacritic insensitive)
                 let fetch: NSFetchRequest<Municipio> = Municipio.fetchRequest()
                 fetch.fetchLimit = 1
                 fetch.predicate = NSPredicate(format: "(nome LIKE[cd] %@)", nome)
-
+                
                 let existente = try? viewContext.fetch(fetch).first
                 let municipio = existente ?? Municipio(context: viewContext)
-
+                
                 // Populate fields
                 municipio.nome = nome
                 municipio.regional = mapaRegionais[chaveNormalizada] ?? "Não definida"
-
+                
                 // If your Core Data model has these optional attributes, set them here safely
                 if municipio.responds(to: Selector(("setFavorito:"))) && municipio.value(forKey: "favorito") == nil {
                     municipio.setValue(false, forKey: "favorito")
@@ -875,10 +875,10 @@ class MunicipioViewModel: ObservableObject {
                     municipio.setValue(Date(), forKey: "updatedAt")
                 }
             }
-
+            
             try viewContext.save()
             fetchMunicipios()
-
+            
         } catch {
             print("Erro ao popular municípios: \(error)")
         }
@@ -896,118 +896,138 @@ class MunicipioViewModel: ObservableObject {
             if let count = try? viewContext.count(for: countRequest), count > 0 {
                 return
             }
-
+            
             // Dataset placeholder: substitua com seus dados reais
             // Exemplo de estrutura: cada item representa um registro da tabela RegionaisInfo5
             // Ajuste os campos/keys conforme os atributos do seu modelo Core Data
-            let dadosRegionais: [[String: Any]] = [
-                [
-                    "nome": "CAMPO MOURÃO",
-                    "codigo": "CM",
-                    "descricao": "Regional de Campo Mourão",
-                    "ordem": 1
-                ],
-                [
-                    "nome": "CASCAVEL",
-                    "codigo": "CV",
-                    "descricao": "Regional de Cascavel",
-                    "ordem": 2
-                ],
-                [
-                    "nome": "CURITIBA",
-                    "codigo": "CTB",
-                    "descricao": "Regional de Curitiba",
-                    "ordem": 3
-                ],
-                [
-                    "nome": "GUARAPUAVA",
-                    "codigo": "GUA",
-                    "descricao": "Regional de Guarapuava",
-                    "ordem": 4
-                ],
-                [
-                    "nome": "LONDRINA",
-                    "codigo": "LDA",
-                    "descricao": "Regional de Londrina",
-                    "ordem": 5
-                ],
-                [
-                    "nome": "MARINGÁ",
-                    "codigo": "MGA",
-                    "descricao": "Regional de Maringá",
-                    "ordem": 6
-                ],
-                [
-                    "nome": "PATO BRANCO",
-                    "codigo": "PBO",
-                    "descricao": "Regional de Pato Branco",
-                    "ordem": 7
-                ],
-                [
-                    "nome": "PONTA GROSSA",
-                    "codigo": "PG",
-                    "descricao": "Regional de Ponta Grossa",
-                    "ordem": 8
-                ],
-                [
-                    "nome": "SANTO ANTONIO DA PLATINA",
-                    "codigo": "SAP",
-                    "descricao": "Regional de Santo Antônio da Platina",
-                    "ordem": 9
-                ],
-                [
-                    "nome": "UMUARAMA",
-                    "codigo": "UMA",
-                    "descricao": "Regional de Umuarama",
-                    "ordem": 10
-                ],
-                [
-                    "nome": "UNIÃO DA VITÓRIA",
-                    "codigo": "UDV",
-                    "descricao": "Regional de União da Vitória",
-                    "ordem": 11
-                ]
+            let valores1: [(nome: String, chefe: String, ramal: String, endereco: String)] = [
+                (
+                    nome: "Curitiba",
+                    chefe: "ENG. CIVIL CINTHIA APARECIDA DE LIMA",
+                    ramal: "41 3210-2938",
+                    endereco: """
+                        Rua Jacy Loureiro de Campos, nº 6, 2º andar,
+                        Praça Nossa Senhora de Santa Salete – Palácio das Araucárias,
+                        CEP 82590-300 – Curitiba-PR
+                        """
+                ),
+                (
+                    nome: "Ponta Grossa",
+                    chefe: "ENG. CIVIL JOAO ALFREDO THOME",
+                    ramal: "42 99144-7400",
+                    endereco: """
+                        Rua José do Patrocínio, 238B – CEP 84040-200,
+                        Ponta Grossa-PR
+                        """
+                ),
+                (
+                    nome: "União da Vitória",
+                    chefe:"ADV. NELSON RONALDO PEDROSO",
+                    ramal:"42 99955-8564",
+                    endereco:"""
+                    Avenida Bento Munhoz da Rocha Neto 1251,
+                    Bairro São Bernardo do Campo – CEP 84600-348,
+                    União da Vitória-PR
+                    """
+                ),
+                (
+                    nome:"Londrina",
+                    chefe:"ENG. CIVIL FABIO BAHL OLIVEIRA",
+                    ramal:"(41) 98846-2339",
+                    endereco:"""
+                    Rua Cambará, 207 – CEP 86010-530,
+                    Londrina-PR
+                    """
+                ),
+                (
+                    nome:"Santo Antônio da Platina",
+                    chefe:"ENG. CIVIL JOÃO VITOR DE OLIVEIRA NABARRO",
+                    ramal:"41 98846-2696",
+                    endereco:"""
+                    Rua Marechal Deodoro da Fonseca, 185 – Centro,
+                    CEP 86430-000 – Santo Antônio da Platina-PR
+                    """
+                ),
+                (
+                    nome:"Cascavel",
+                    chefe:"ARQUITETO RICARDO CEOLA",
+                    ramal:"45 3223-2081",
+                    endereco:"""
+                    Rua Antonina, 2406 – Centro – CEP 85812-040,
+                    Cascavel-PR
+                    """
+                ),
+                (
+                    nome:"Maringá",
+                    chefe:"ENG. CIVIL GUSTAVO VIDOR GODOI",
+                    ramal:"44 99948-5647",
+                    endereco:"""
+                    Avenida Humaitá 268 – Zona 4 – CEP 87014-200,
+                    Maringá-PR
+                    """
+                ),
+                (
+                    nome:"Pato Branco",
+                    chefe:"ENG. CIVIL JOCEANDRO TONIAL",
+                    ramal:"46 3220-7220",
+                    endereco:"""
+                    Rua Sete de Setembro, 363 – CEP 85506-040,
+                    Pato Branco-PR
+                    """
+                ),
+                (
+                    nome:"Campo Mourão",
+                    chefe:"ENG. CIVIL FERNANDO CAVALI ALMEIDA",
+                    ramal:"44 99846-7698",
+                    endereco:"""
+                    Avenida Capitão Índio Bandeira, 920, 2º andar,
+                    Prédio da PGE (anexo à Agência de Rendas) – Centro,
+                    CEP 87300-005 – Campo Mourão-PR
+                    """
+                ),
+                (
+                    nome:"Guarapuava",
+                    chefe:"ENG. CIVIL JOSE LUIZ CIESLACK",
+                    ramal:"42 3621-7316",
+                    endereco:"""
+                    Rua Cônego Braga, 25 – Centro – CEP 85010-050,
+                    Guarapuava-PR
+                    """
+                ),
+                (
+                    nome:"Umuarama",
+                    chefe:"ENG. CIVIL VIVIANNE MENDES LOWE",
+                    ramal:"44 99936-9211",
+                    endereco:"""
+                    Rua Walter Kraiser, 3055 – CEP 87503-660,
+                    Umuarama-PR
+                    """
+                )
             ]
-
+            
             // Criação dos registros
             guard let entity = NSEntityDescription.entity(forEntityName: "RegionalInfo5", in: viewContext) else {
                 print("Entidade RegionalInfo5 não encontrada no modelo.")
                 return
             }
-
-            for item in dadosRegionais {
+            
+            // Inserção no Core Data
+            for item in valores1 {
                 let obj = NSManagedObject(entity: entity, insertInto: viewContext)
-
-                // Atribuições genéricas com segurança
-                if let nome = item["nome"] as? String {
-                    obj.setValue(nome, forKey: "nome")
-                }
-                if let codigo = item["codigo"] as? String {
-                    obj.setValue(codigo, forKey: "codigo")
-                }
-                if let descricao = item["descricao"] as? String {
-                    obj.setValue(descricao, forKey: "descricao")
-                }
-                if let ordem = item["ordem"] as? Int { // ou Int16/Int32 conforme seu modelo
-                    obj.setValue(ordem, forKey: "ordem")
-                }
-
-                // Campos opcionais comuns
-                if obj.responds(to: Selector(("setId:"))) && obj.value(forKey: "id") == nil {
-                    obj.setValue(UUID(), forKey: "id")
-                }
-                if obj.responds(to: Selector(("setCreatedAt:"))) && obj.value(forKey: "createdAt") == nil {
-                    obj.setValue(Date(), forKey: "createdAt")
-                }
-                if obj.responds(to: Selector(("setUpdatedAt:"))) {
-                    obj.setValue(Date(), forKey: "updatedAt")
-                }
+                
+                obj.setValue(item.nome, forKey: "nome")
+                obj.setValue(item.chefe, forKey: "chefe")
+                obj.setValue(item.ramal, forKey: "ramal")
+                obj.setValue(item.endereco, forKey: "endereco")
             }
-
-            try viewContext.save()
-        } catch {
-            print("Erro ao popular RegionalInfo5: \(error)")
+            
+            do {
+                try viewContext.save()
+                print("InfoRegionais salvos com sucesso.")
+            } catch {
+                print("Erro ao salvar InfoRegionais: \(error)")
+            }
+            
         }
     }
 }
-

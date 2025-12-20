@@ -68,19 +68,25 @@ struct PaginaGrandeMunicipiosView: View {
 
     // MARK: - FUNÇÃO ASSÍNCRONA PARA SINCRONIZAR MUNICÍPIOS
     private func syncMunicipios() async {
-        do {
-            // Chamada assíncrona para migrar/sincronizar municipios do Firebase
-            try await FirestoreMigrator().migrateMunicipiosIfNeeded(context: context)
-            if context.hasChanges {
-                try context.save()
+        // Usar API baseada em completion em vez de try/await para remover warnings
+        FirestoreMigrator.syncMunicipiosFromFirestore(context: context) { result in
+            switch result {
+            case .success:
+                Task { @MainActor in
+                    do {
+                        if context.hasChanges {
+                            try context.save()
+                        }
+                        // Forçar UI refresh no main thread (FetchRequest fará o reload automático)
+                        _ = municipios.count
+                    } catch {
+                        print("[syncMunicipios] Erro ao salvar contexto após sync: \(error.localizedDescription)")
+                    }
+                }
+                print("[syncMunicipios] Sincronização from path installids/{deviceID}/municipios concluída com sucesso.")
+            case .failure(let error):
+                print("[syncMunicipios] Falha ao sincronizar do Firebase, mantendo dados locais do Core Data: \(error.localizedDescription)")
             }
-            // Forçar UI refresh no main thread (FetchRequest fará o reload automático)
-            await MainActor.run {
-                _ = municipios.count
-            }
-            print("[syncMunicipios] Sincronização (upsert) concluída com sucesso.")
-        } catch {
-            print("[syncMunicipios] Falha ao sincronizar (upsert) do Firebase, mantendo dados locais: \(error.localizedDescription)")
         }
     }
 
@@ -90,10 +96,7 @@ struct PaginaGrandeMunicipiosView: View {
             ZoomableScrollView5(minZoomScale: 0.5, maxZoomScale: 3.0) {
                 content
             }
-            .navigationTitle("Municípios")
-            .task {
-                await syncMunicipios()
-            }
+            .navigationTitle("ListaDeMunicípios")
             .toolbar {
 #if DEBUG
                 ToolbarItem(placement: .navigationBarLeading) {

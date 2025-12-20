@@ -7,7 +7,6 @@ import Darwin
 import FirebaseCore
 #endif
 
-
 #if canImport(FirebaseCrashlytics)
 import FirebaseCrashlytics
 #endif
@@ -16,9 +15,10 @@ import FirebaseCrashlytics
 import FirebaseAppCheck
 #endif
 
+// MARK: - AppDelegate
+
 final class AppDelegate: NSObject, UIApplicationDelegate {
 
-    // Instância CORRETA, não um array
     var funcionarioViewModel: FuncionarioViewModel!
 
     func application(
@@ -26,48 +26,53 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil
     ) -> Bool {
 
-        // Inicializa o Core Data antes de qualquer ViewModel
+        // Core Data
         let context = PersistenceController.shared.container.viewContext
-
-        // Agora cria o ViewModel corretamente
         self.funcionarioViewModel = FuncionarioViewModel(context: context)
 
         // -----------------------------------------------------------
-        // 🔥 APP CHECK DEBUG MODE (ATIVAR ANTES DO FIREBASE CONFIGURE)
+        // 🔐 APP CHECK
+        // Debug no Xcode / App Attest em TestFlight & App Store
         // -----------------------------------------------------------
-        #if DEBUG
         #if canImport(FirebaseAppCheck)
+        #if DEBUG
         print("[AppCheck] DEBUG MODE ENABLED")
+        print("[AppCheck] RELEASE MODE — DEBUG ENABLED")
+        print("Devide ID is:", FirestoreMigrator.deviceID )
         AppCheck.setAppCheckProviderFactory(AppCheckDebugProviderFactory())
         #else
-        print("[AppCheck] FirebaseAppCheck not available; skipping AppCheck debug setup.")
+        print("[AppCheck] RELEASE MODE — App Attest ENABLED")
+        AppCheck.setAppCheckProviderFactory(AppAttestProviderFactory())
         #endif
-        // Agora você consegue chamar isto SEM CRASH:
-        funcionarioViewModel.resetToDefaultMode()
-        print("[Launch] resetToDefaultMode() executed")
         #endif
         // -----------------------------------------------------------
 
-        // Inicializa Firebase (apenas se FirebaseCore estiver disponível)
+        // -----------------------------------------------------------
+        // 🔥 Firebase (configurar UMA ÚNICA VEZ)
+        // -----------------------------------------------------------
         #if canImport(FirebaseCore)
-        if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
-            FirebaseApp.configure()
-            print("[Firebase] FirebaseApp.configure() called.")
-        } else {
-            print("[Firebase] GoogleService-Info.plist not found.")
+        if FirebaseApp.app() == nil {
+            if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
+                FirebaseApp.configure()
+                print("[Firebase] FirebaseApp.configure() called.")
+            } else {
+                print("[Firebase] GoogleService-Info.plist not found.")
+            }
         }
-        #else
-        print("[Firebase] FirebaseCore not available; skipping FirebaseApp.configure().")
         #endif
-        AppDataResetter.resetForXcodeBuildIfNeeded(context: context)
+        // -----------------------------------------------------------
+
         return true
     }
 }
 
+// MARK: - Helpers
 
 func isRunningFromXcode() -> Bool {
     return isatty(STDOUT_FILENO) != 0 || getenv("XCODE_RUNNING_FOR_PREVIEWS") != nil
 }
+
+// MARK: - Main App
 
 @main
 struct ListaFuncionariosApp: App {
@@ -81,7 +86,7 @@ struct ListaFuncionariosApp: App {
     @StateObject private var zoomManager = ZoomManager()
 
     init() {
-        // Estilo do app
+        // Estilo
         UINavigationBar.appearance().largeTitleTextAttributes = [.foregroundColor: UIColor(.accentColor)]
         UINavigationBar.appearance().titleTextAttributes = [.foregroundColor: UIColor(.accentColor)]
 
@@ -90,7 +95,6 @@ struct ListaFuncionariosApp: App {
         let request: NSFetchRequest<Funcionario> = Funcionario.fetchRequest()
         request.fetchLimit = 1
         _ = try? context.fetch(request)
-
     }
 
     var body: some Scene {
@@ -99,39 +103,36 @@ struct ListaFuncionariosApp: App {
                 HomeView()
             }
             .task {
-                // Ensure file protection is applied as a side-effect during app launch
                 SecurityConfigurator.applyFileProtection()
                 let context = persistenceController.container.viewContext
 
-                // If running from Xcode (debug/dev), wipe Firestore employees and local Core Data to avoid duplicates between runs
+                // -----------------------------------------------------------
+                // 🧪 DEBUG: wipe/migrate only when running from Xcode
+                // -----------------------------------------------------------
                 #if DEBUG
                 if isRunningFromXcode() {
                     #if canImport(FirebaseCore)
-                    if FirebaseApp.app() == nil {
-                        if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
-                            FirebaseApp.configure()
-                        }
-                    }
                     if FirebaseApp.app() != nil {
                         do {
                             await FirestoreMigrator.wipeFuncionariosInFirestore()
-                            let context = persistenceController.container.viewContext
-                            let migratedCount = try await FirestoreMigrator.migrateFuncionariosToFirestoreAsync(from: context)
-                            let migratedMunicipiosCount = try await FirestoreMigrator.migrateMunicipiosToFirestoreAsync(from: context)
-                            print("[Wipe] Migrated funcionarios to Firestore (debug run). Count: \(migratedCount)")
-                            print("[Wipe] Migrated municipios to Firestore (debug run). Count: \(migratedMunicipiosCount)")
-                            // End municipios migration
+
+                            let migratedCount = try await FirestoreMigrator
+                                .migrateFuncionariosToFirestoreAsync(from: context)
+
+                            let didSyncMunicipiosKeyDebug = "didSyncMunicipiosOnLaunchDebug"
+                            if !UserDefaults.standard.bool(forKey: didSyncMunicipiosKeyDebug) {
+                                let syncedMunicipios = try await FirestoreMigrator.syncMunicipios(context: context)
+                                print("[Wipe] Synced municipios (debug). Count: \(syncedMunicipios)")
+                                UserDefaults.standard.set(true, forKey: didSyncMunicipiosKeyDebug)
+                                let didSyncInfoRegionaisKeyDebug = "didSyncInfoRegionaisOnLaunchDebug"
+                            }
                         } catch {
-                            print("[Wipe] Error during Firestore wipe/migrate: \(error)")
+                            print("[Wipe] Error: \(error)")
                         }
-                    } else {
-                        print("[Wipe] Skipping Firestore wipe: Firebase not configured.")
                     }
-                    #else
-                    print("[Wipe] FirebaseCore not available; skipping Firestore wipe.")
                     #endif
 
-                    // Also wipe local Core Data funcionarios
+                    // Wipe local Core Data
                     let fetch = NSFetchRequest<NSFetchRequestResult>(entityName: "Funcionario")
                     let deleteReq = NSBatchDeleteRequest(fetchRequest: fetch)
                     do {
@@ -139,61 +140,75 @@ struct ListaFuncionariosApp: App {
                         try context.save()
                         print("[Wipe] Local Core Data funcionarios wiped.")
                     } catch {
-                        print("[Wipe] Failed to wipe local Core Data funcionarios: \(error)")
+                        print("[Wipe] Failed to wipe local Core Data: \(error)")
                     }
                 }
                 #endif
+                // -----------------------------------------------------------
 
-                // One-time automatic migration guard using UserDefaults
+                // -----------------------------------------------------------
+                // 🚀 One-time migration on first launch
+                // -----------------------------------------------------------
                 let didMigrateKey = "didMigrateFuncionariosToFirestore"
                 #if canImport(FirebaseCore)
-                if UserDefaults.standard.bool(forKey: didMigrateKey) == false {
-                    if FirebaseApp.app() != nil {
-                        let context = persistenceController.container.viewContext
-                        print("[Migration] Auto-migration started (first launch) -> 'employees'.")
-                        FirestoreMigrator.migrateFuncionariosToFirestore(from: context) { result in
-                            switch result {
-                            case .success(let count):
-                                print("[Migration] Auto-migration completed. Migrated: \(count)")
-                                UserDefaults.standard.set(true, forKey: didMigrateKey)
-                            case .failure(let error):
-                                print("[Migration] Auto-migration failed: \(error.localizedDescription)")
+                if !UserDefaults.standard.bool(forKey: didMigrateKey),
+                   FirebaseApp.app() != nil {
+
+                    print("[Migration] Auto-migration started.")
+                    FirestoreMigrator.migrateFuncionariosToFirestore(from: context) { result in
+                        switch result {
+                        case .success(let count):
+                            print("[Migration] Completed. Migrated: \(count)")
+                            UserDefaults.standard.set(true, forKey: didMigrateKey)
+                        case .failure(let error):
+                            print("[Migration] Failed: \(error.localizedDescription)")
+                        }
+                    }
+
+                    let didSyncMunicipiosKey = "didSyncMunicipiosToFirestore"
+                    if !UserDefaults.standard.bool(forKey: didSyncMunicipiosKey) {
+                        Task {
+                            do {
+                                let count = try await FirestoreMigrator.syncMunicipios(context: context)
+                                print("[Migration] Municipios synced: \(count)")
+                                UserDefaults.standard.set(true, forKey: didSyncMunicipiosKey)
+                                let didSyncInfoRegionaisKey = "didSyncInfoRegionaisOnLaunchDebug"
+                                if !UserDefaults.standard.bool(forKey: didSyncInfoRegionaisKey) {
+                                    let syncedInfoRegionais: Int = try await FirestoreMigrator.syncInfoRegionais(context: context)
+                                    print("[Wipe] Synced info regionais (debug). Count: \(syncedInfoRegionais)")
+                                    UserDefaults.standard.set(true, forKey: didSyncInfoRegionaisKey)
+                                }
+                            } catch {
+                                print("[Migration] Municipios sync failed: \(error)")
                             }
                         }
-                    } else {
-                        print("[Migration] Skipping auto-migration: Firebase not configured.")
                     }
-                } else {
-                    print("[Migration] Auto-migration already performed previously. Skipping.")
                 }
-                #else
-                print("[Migration] FirebaseCore not available; skipping auto-migration.")
                 #endif
+                // -----------------------------------------------------------
 
-                // After ensuring Firebase is configured, sync Firestore -> Core Data so UI reflects latest remote data on launch
+                // -----------------------------------------------------------
+                // 🔄 Sync Firestore → Core Data on launch
+                // -----------------------------------------------------------
                 #if canImport(FirebaseCore)
                 if FirebaseApp.app() != nil {
-                    let context = persistenceController.container.viewContext
                     FirestoreMigrator.syncFromFirestoreToCoreData(context: context) { result in
                         switch result {
                         case .success(let updated):
-                            print("[Sync] Firestore -> Core Data completed. Updated/created employees: \(updated)")
+                            print("[Sync] Firestore → Core Data OK. Updated: \(updated)")
                         case .failure(let error):
-                            print("[Sync] Firestore -> Core Data failed: \(error.localizedDescription)")
+                            print("[Sync] Firestore → Core Data failed: \(error.localizedDescription)")
                         }
                     }
-                } else {
-                    print("[Sync] Skipping Firestore -> Core Data: Firebase not configured.")
                 }
-                #else
-                print("[Sync] FirebaseCore not available; skipping Firestore -> Core Data sync.")
                 #endif
+                // -----------------------------------------------------------
             }
             .environment(\.managedObjectContext, persistenceController.container.viewContext)
             .environmentObject(funcionarioVM)
+            .environmentObject(zoomManager)
             .accentColor(.accentColor)
             .modifier(AppThemeModifier())
-            .environmentObject(zoomManager)
         }
     }
 }

@@ -41,7 +41,7 @@ struct FirestoreMigrator {
         return gen
     }
 
-    private static var deviceDocument: DocumentReference {
+    public static var deviceDocument: DocumentReference {
         // Structure: installids/{deviceID}
         db.collection("installids").document(deviceID)
     }
@@ -55,7 +55,7 @@ struct FirestoreMigrator {
         // Structure: installids/{deviceID}/municipios
         deviceDocument.collection("municipios")
     }
-    private static var inforegionaisDeviceCollection: CollectionReference {
+    public static var inforegionaisDeviceCollection: CollectionReference {
         // Structure: installids/{deviceID}/municipios
         deviceDocument.collection("inforegionais")
     }
@@ -646,13 +646,13 @@ struct FirestoreMigrator {
     }
 
     /// Bulk upsert from an array of dictionaries (id + fields). Fast and idempotent.
-    static func upsertRegionalInfoBatch(items: [(id: String, data: [String: Any])], completion: ((Result<Int, Error>) -> Void)? = nil) {
+    static func upsertRegionalInfoBatch(items: [(id: UUID, data: [String: Any])], completion: ((Result<Int, Error>) -> Void)? = nil) {
         let batch = db.batch()
         // Clean potential placeholder; we do this outside the batch for simplicity
         regionalInfoDeviceCollection.document("inforegionais").getDocument { doc, _ in
             if let doc, doc.exists { doc.reference.delete(completion: nil) }
             for item in items {
-                let ref = regionalInfoDeviceCollection.document(item.id)
+                let ref = regionalInfoDeviceCollection.document(item.id.uuidString)
                 batch.setData(item.data, forDocument: ref, merge: true)
             }
             batch.commit { err in
@@ -719,58 +719,6 @@ struct FirestoreMigrator {
         try await withCheckedThrowingContinuation { continuation in
             syncInfoRegionaisFromFirestore(context: context) { result in
                 continuation.resume(with: result)
-            }
-        }
-    }
-
-    /// Completion-based sync of regional info (Firestore -> Core Data) targeting entity `InfoRegionais5`.
-    static func syncInfoRegionaisFromFirestore(
-        context: NSManagedObjectContext,
-        completion: @escaping (Result<Int, Error>) -> Void
-    ) {
-        regionalInfoDeviceCollection.getDocuments { snapshot, error in
-            guard let docs = snapshot?.documents, error == nil else {
-                completion(.failure(error ?? NSError(domain: "Firestore", code: -1)))
-                return
-            }
-
-            var updated = 0
-            context.perform {
-                for doc in docs where doc.documentID != "inforegionais" {
-                    let data = doc.data()
-
-                    // Prepare a fetch for InfoRegionais5 using best-effort unique keys
-                    let fetch = NSFetchRequest<NSFetchRequestResult>(entityName: "InfoRegionais5")
-                    fetch.fetchLimit = 1
-
-                    if let nome = data["nome"] as? String, let ramal = data["ramal"] as? String {
-                        fetch.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
-                            NSPredicate(format: "nome == %@", nome),
-                            NSPredicate(format: "ramal == %@", ramal)
-                        ])
-                    } else if let nome = data["nome"] as? String {
-                        fetch.predicate = NSPredicate(format: "nome == %@", nome)
-                    } else {
-                        fetch.predicate = nil
-                    }
-
-                    let regional: NSManagedObject
-                    if let existing = try? context.fetch(fetch).first as? NSManagedObject {
-                        regional = existing
-                    } else {
-                        regional = NSEntityDescription.insertNewObject(forEntityName: "InfoRegionais5", into: context)
-                    }
-
-                    if let nome = data["nome"] as? String { regional.setValue(nome, forKey: "nome") }
-                    if let chefe = data["chefe"] as? String { regional.setValue(chefe, forKey: "chefe") }
-                    if let ramal = data["ramal"] as? String { regional.setValue(ramal, forKey: "ramal") }
-                    if let endereco = data["endereco"] as? String { regional.setValue(endereco, forKey: "endereco") }
-
-                    updated += 1
-                }
-
-                do { try context.save(); completion(.success(updated)) }
-                catch { completion(.failure(error)) }
             }
         }
     }
@@ -1318,4 +1266,3 @@ extension FirestoreMigrator {
 #endif
     }
 }
-

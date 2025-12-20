@@ -80,14 +80,9 @@ struct PaginaGrandeInfoView: View {
                 FirestoreMigrator.ensureRegionalInfoCollectionExists()
 
                 // Prepare upsert batch from current fetched objects
-                var items: [(id: String, data: [String: Any])] = []
+                var items: [(id: UUID, data: [String: Any])] = []
                 for obj in regionalinfo {
-                    let id: String
-                    if let remoteID = obj.value(forKey: "remoteID") as? String, !remoteID.isEmpty {
-                        id = remoteID
-                    } else {
-                        id = firestoreSafeID(for: obj.objectID)
-                    }
+                    let id = UUID()
                     var dict: [String: Any] = [:]
                     if let nome = obj.value(forKey: "nome") as? String { dict["nome"] = nome }
                     if let chefe = obj.value(forKey: "chefe") as? String { dict["chefe"] = chefe }
