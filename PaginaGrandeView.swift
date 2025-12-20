@@ -1,5 +1,30 @@
 import SwiftUI
 internal import CoreData
+#if canImport(FirebaseFirestore)
+import FirebaseFirestore
+#endif
+
+// Lightweight shim so the file compiles without Firebase installed.
+#if !canImport(FirebaseFirestore)
+private enum FieldValueShim {
+    // Placeholder to mimic FieldValue.delete() usage; unused but here for parity
+    static var deleteToken: String { "__DELETE__" }
+}
+private struct FieldValue {
+    static func delete() -> String { FieldValueShim.deleteToken }
+}
+private final class Firestore {
+    static func firestore() -> Firestore { Firestore() }
+    func collection(_ name: String) -> Self { self }
+    func document(_ id: String) -> Self { self }
+    func setData(_ data: [String: Any], merge: Bool = false, completion: ((Error?) -> Void)? = nil) {
+        // No-op shim; log so developers know this isn't real Firestore.
+        print("[Firestore SHIM] setData called on collection/document with data=\(data), merge=\(merge)")
+        completion?(nil)
+    }
+}
+#endif
+
 #if os(iOS)
 import UIKit
 #endif
@@ -19,7 +44,7 @@ struct PaginaGrandeView: View {
     @State private var regionalSelecionada: String = ""
     @State private var zoom: CGFloat = 1.0
     @State private var showPurgeConfirmation = false
-   
+    private var listofregionais: [String] { todasRegionais }
     // MARK: - REGION LIST
     private var todasRegionais: [String] {
         var set: Set<String> = []
@@ -53,9 +78,32 @@ struct PaginaGrandeView: View {
         }
     }
 
+    // Extract only the part after the first vertical bar ("|")
+    private func nameAfterPipe(_ value: String?) -> String? {
+        guard let value = value, !value.isEmpty else { return nil }
+        if let range = value.range(of: "|") {
+            let after = value[range.upperBound...]
+            let trimmed = String(after).trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func firestoreSafeID(for objectID: NSManagedObjectID) -> String {
+        let uri = objectID.uriRepresentation().absoluteString
+        let data = Data(uri.utf8)
+        var encoded = data.base64EncodedString()
+        encoded = encoded
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        return encoded
+    }
+
     // MARK: - DELETE HELPERS
     private func deleteFuncionario(_ funcionario: Funcionario) {
-        deleteFromFirebase(entity: "Funcionario", id: funcionario.objectID.uriRepresentation().absoluteString)
+        deleteFromFirebase(entity: "Funcionario", id: firestoreSafeID(for: funcionario.objectID))
         context.delete(funcionario)
         do { try context.save() } catch { print("Erro ao salvar após deletar Funcionário: \(error)") }
     }
@@ -63,7 +111,44 @@ struct PaginaGrandeView: View {
     private func deleteFromFirebase(entity: String, id: String) {
         // TODO: Integrate with your Firebase layer. Example:
         // Firestore.firestore().collection(entity).document(id).delete { error in ... }
+        // Note: 'id' is a Firestore-safe identifier derived from Core Data's objectID.
         print("[Firebase] Deleting \(entity) with id: \(id)")
+    }
+    
+    private func upsertNomerealInFirebase(for funcionario: Funcionario, nomereal: String?) {
+        // TODO: Replace with real Firestore code when Firebase is configured.
+        let id = firestoreSafeID(for: funcionario.objectID)
+
+        #if canImport(FirebaseFirestore)
+        if let nomereal = nomereal, !nomereal.isEmpty {
+            print("[Firebase] Upserting Funcionario nomereal id=\(id) nomereal=\(nomereal)")
+            Firestore.firestore()
+                .collection("Funcionario")
+                .document(id)
+                .setData(["nomereal": nomereal], merge: true) { error in
+                    if let error = error {
+                        print("[Firebase] Failed to upsert nomereal: \(error)")
+                    }
+                }
+        } else {
+            print("[Firebase] Clearing Funcionario nomereal id=\(id)")
+            Firestore.firestore()
+                .collection("Funcionario")
+                .document(id)
+                .setData(["nomereal": FieldValue.delete()], merge: true) { error in
+                    if let error = error {
+                        print("[Firebase] Failed to clear nomereal: \(error)")
+                    }
+                }
+        }
+        #else
+        // FirebaseFirestore not available: just log intent.
+        if let nomereal = nomereal, !nomereal.isEmpty {
+            print("[Firebase SHIM] Would upsert Funcionario nomereal id=\(id) nomereal=\(nomereal)")
+        } else {
+            print("[Firebase SHIM] Would clear Funcionario nomereal id=\(id)")
+        }
+        #endif
     }
 
 #if DEBUG
@@ -86,6 +171,28 @@ struct PaginaGrandeView: View {
                 content
             }
             .navigationTitle("Pesquisa de Funcionários")
+            .onAppear {
+                Task { @MainActor in
+                    do {
+                        print("[PaginaGrandeView] Starting wiping out any unnamed Funcionarios on appear.")
+                        let removed = try await FirestoreMigrator.purgeUnnamedFuncionariosAsync(context: context)
+                        if removed > 0 {
+                            print("[PaginaGrandeView] Purged \(removed) unnamed Funcionarios on appear.")
+                        }
+                    } catch {
+                        print("[PaginaGrandeView] Failed to purge unnamed Funcionarios: \(error)")
+                    }
+                }
+                Task { @MainActor in
+                    for f in funcionarios {
+                        let parsed = nameAfterPipe(f.nome)
+                        upsertNomerealInFirebase(for: f, nomereal: parsed)
+                    }
+                }
+                Task { @MainActor in
+                    FirestoreMigrator.schedulePostStartupSanitization(delaySeconds: 8)
+                }
+            }
 
         }
     }
@@ -166,13 +273,16 @@ struct PaginaGrandeView: View {
             .frame(width: 1000)
             .background(RoundedRectangle(cornerRadius: 16).fill(.white))
             .overlay(RoundedRectangle(cornerRadius: 16).stroke(.blue.opacity(0.4), lineWidth: 4))
-            .ignoresSafeArea(.keyboard) 
+            .ignoresSafeArea(.keyboard)
 
             // ---------------------- TABLE + SCROLL ----------------------
             ScrollView(showsIndicators: true) {
                 LazyVStack(spacing: 0) {
                     ForEach(filteredFuncionarios, id: \.objectID) { funcionario in
-                        CardRowSimple04(funcionario: funcionario, zoom: zoom)
+                            if let regional = funcionario.regional, listofregionais.contains(regional) {
+                            // Or when listofregionais contains the regional
+                            CardRowSimple04(funcionario: funcionario, zoom: zoom)
+                        }
                     }
                 }
                 .padding(.vertical, 8)
@@ -193,6 +303,20 @@ struct CardRowSimple04: View {
     @ObservedObject var funcionario: Funcionario
     let zoom: CGFloat
 
+    // Extract only the part after the first vertical bar ("|")
+    private func afterPipe(_ value: String?) -> String {
+        guard let value = value, !value.isEmpty else { return "" }
+        if let range = value.range(of: "|") {
+            let after = value[range.upperBound...]
+            return String(after).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var displayNome: String {  afterPipe(funcionario.nome) }
+    private var displayFuncao: String { afterPipe(funcionario.funcao) }
+    private var displayRegional: String { afterPipe(funcionario.regional) }
+
     private var profileImage: some View {
         ZStack {
             if let data = funcionario.imagem,
@@ -202,7 +326,7 @@ struct CardRowSimple04: View {
                     .scaledToFill()
             } else {
                 Circle().fill(Color(.systemGray5))
-                Text(String(funcionario.nome?.first ?? "F"))
+                Text(String((displayNome.first ?? "F")))
                     .font(.system(size: 22 * zoom))
                     .foregroundColor(.primary)
             }
@@ -225,12 +349,12 @@ struct CardRowSimple04: View {
                     )
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Nome: \(funcionario.nome ?? "(Sem nome)")")
+                    Text("Nome: \(displayNome.isEmpty ? "NotIdentified" : displayNome)")
                         .font(.headline)
-                    Text("Função: \(funcionario.funcao ?? "")")
+                    Text("Função: \(displayFuncao)")
                         .font(.headline)
 
-                    Text("Regional: \(funcionario.regional ?? "")")
+                    Text("Regional: \(displayRegional)")
                         .font(.system(size: 14 * zoom))
                         .foregroundColor(.blue)
                 }

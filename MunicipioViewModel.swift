@@ -883,5 +883,131 @@ class MunicipioViewModel: ObservableObject {
             print("Erro ao popular municípios: \(error)")
         }
     }
+    
+    func popularRegionalInfoSeNecessario() {
+        // Tenta obter a entidade RegionaisInfo5 do Core Data
+        // Este método segue o mesmo padrão de popularMunicipiosSeNecessario()
+        // Substitua o dataset abaixo pelos dados reais da sua tabela RegionaisInfo5
+        do {
+            // Verifica se já existem registros
+            let countRequest = NSFetchRequest<NSFetchRequestResult>(entityName: "RegionalInfo5")
+            countRequest.includesSubentities = false
+            countRequest.fetchLimit = 1
+            if let count = try? viewContext.count(for: countRequest), count > 0 {
+                return
+            }
+
+            // Dataset placeholder: substitua com seus dados reais
+            // Exemplo de estrutura: cada item representa um registro da tabela RegionaisInfo5
+            // Ajuste os campos/keys conforme os atributos do seu modelo Core Data
+            let dadosRegionais: [[String: Any]] = [
+                [
+                    "nome": "CAMPO MOURÃO",
+                    "codigo": "CM",
+                    "descricao": "Regional de Campo Mourão",
+                    "ordem": 1
+                ],
+                [
+                    "nome": "CASCAVEL",
+                    "codigo": "CV",
+                    "descricao": "Regional de Cascavel",
+                    "ordem": 2
+                ],
+                [
+                    "nome": "CURITIBA",
+                    "codigo": "CTB",
+                    "descricao": "Regional de Curitiba",
+                    "ordem": 3
+                ],
+                [
+                    "nome": "GUARAPUAVA",
+                    "codigo": "GUA",
+                    "descricao": "Regional de Guarapuava",
+                    "ordem": 4
+                ],
+                [
+                    "nome": "LONDRINA",
+                    "codigo": "LDA",
+                    "descricao": "Regional de Londrina",
+                    "ordem": 5
+                ],
+                [
+                    "nome": "MARINGÁ",
+                    "codigo": "MGA",
+                    "descricao": "Regional de Maringá",
+                    "ordem": 6
+                ],
+                [
+                    "nome": "PATO BRANCO",
+                    "codigo": "PBO",
+                    "descricao": "Regional de Pato Branco",
+                    "ordem": 7
+                ],
+                [
+                    "nome": "PONTA GROSSA",
+                    "codigo": "PG",
+                    "descricao": "Regional de Ponta Grossa",
+                    "ordem": 8
+                ],
+                [
+                    "nome": "SANTO ANTONIO DA PLATINA",
+                    "codigo": "SAP",
+                    "descricao": "Regional de Santo Antônio da Platina",
+                    "ordem": 9
+                ],
+                [
+                    "nome": "UMUARAMA",
+                    "codigo": "UMA",
+                    "descricao": "Regional de Umuarama",
+                    "ordem": 10
+                ],
+                [
+                    "nome": "UNIÃO DA VITÓRIA",
+                    "codigo": "UDV",
+                    "descricao": "Regional de União da Vitória",
+                    "ordem": 11
+                ]
+            ]
+
+            // Criação dos registros
+            guard let entity = NSEntityDescription.entity(forEntityName: "RegionalInfo5", in: viewContext) else {
+                print("Entidade RegionalInfo5 não encontrada no modelo.")
+                return
+            }
+
+            for item in dadosRegionais {
+                let obj = NSManagedObject(entity: entity, insertInto: viewContext)
+
+                // Atribuições genéricas com segurança
+                if let nome = item["nome"] as? String {
+                    obj.setValue(nome, forKey: "nome")
+                }
+                if let codigo = item["codigo"] as? String {
+                    obj.setValue(codigo, forKey: "codigo")
+                }
+                if let descricao = item["descricao"] as? String {
+                    obj.setValue(descricao, forKey: "descricao")
+                }
+                if let ordem = item["ordem"] as? Int { // ou Int16/Int32 conforme seu modelo
+                    obj.setValue(ordem, forKey: "ordem")
+                }
+
+                // Campos opcionais comuns
+                if obj.responds(to: Selector(("setId:"))) && obj.value(forKey: "id") == nil {
+                    obj.setValue(UUID(), forKey: "id")
+                }
+                if obj.responds(to: Selector(("setCreatedAt:"))) && obj.value(forKey: "createdAt") == nil {
+                    obj.setValue(Date(), forKey: "createdAt")
+                }
+                if obj.responds(to: Selector(("setUpdatedAt:"))) {
+                    obj.setValue(Date(), forKey: "updatedAt")
+                }
+            }
+
+            try viewContext.save()
+        } catch {
+            print("Erro ao popular RegionalInfo5: \(error)")
+        }
+    }
 }
 

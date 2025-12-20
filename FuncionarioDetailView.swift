@@ -31,7 +31,7 @@ struct FuncionarioDetailView: View {
                     profileImage
                         .padding(.top, 20)
 
-                    Text("Nome: \(funcionario.nome ?? "(Sem nome)")")
+                    Text("Nome: \(parseName(funcionario.nome) )")
                         .font(.largeTitle.weight(.semibold))
                         .multilineTextAlignment(.center)
    
@@ -116,6 +116,15 @@ struct FuncionarioDetailView: View {
         }
     }
 
+    // MARK: - NAME PARSING
+    private func parseName(_ raw: String?) -> String {
+        let value = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "(Sem nome)"
+        // Split by vertical bar and take the substring after the last bar, if any
+        let parts = value.split(separator: "|", omittingEmptySubsequences: false)
+        let trimmed = (parts.last.map(String.init) ?? value).trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "(Sem nome)" : trimmed
+    }
+
     // MARK: - PROFILE IMAGE
     private var profileImage: some View {
         ZStack {
@@ -125,12 +134,11 @@ struct FuncionarioDetailView: View {
                     .resizable()
                     .scaledToFill()
             } else {
-                let name = funcionario.nome ?? ""
-                let initials = name.split(separator: " ").prefix(2)
-                    .map { String($0.prefix(1)).uppercased() }.joined()
+                let displayName = parseName(funcionario.nome)
+                let firstInitial = displayName.first.map { String($0).uppercased() } ?? "?"
 
                 Circle().fill(Color(.systemGray5))
-                Text(initials.isEmpty ? "?" : initials)
+                Text(firstInitial)
                     .font(.largeTitle.bold())
                     .foregroundColor(.primary)
             }
@@ -367,4 +375,5 @@ struct FuncionarioDetailView: View {
         }
     }
 }
+
 

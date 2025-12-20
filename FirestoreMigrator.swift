@@ -31,7 +31,7 @@ struct FirestoreMigrator {
     private static var deviceID: String {
         // Per-install identifier: new UUID on first launch, persists in UserDefaults.
         // Deleting the app removes this ID, producing a new bucket on reinstall.
-        let key = "FirestoreMigrator.InstallID"
+        let key = "FirestoreMigrator.InstallID.\(Bundle.main.bundleIdentifier ?? "unknown")"
         if let saved = UserDefaults.standard.string(forKey: key) {
             return saved
         }
@@ -567,6 +567,110 @@ struct FirestoreMigrator {
     }
 
     // MARK: --------------------------------------------------------------------
+    // MARK: - REGIONAL INFO (device-scoped: regionalinfo/devices/{deviceID})
+    // MARK: --------------------------------------------------------------------
+
+    private static var regionalInfoDeviceCollection: CollectionReference {
+        // Structure: installids/{deviceID}/regionalinfo
+        deviceDocument.collection("inforegionais")
+    }
+
+    /// Ensures the regionalinfo collection exists by creating a placeholder doc if empty.
+    /// Safe and idempotent: if docs exist, it does nothing. If it creates a placeholder,
+    /// it also cleans it up on the next real upsert.
+    static func ensureRegionalInfoCollectionExists(completion: ((Result<Void, Error>) -> Void)? = nil) {
+        regionalInfoDeviceCollection.limit(to: 1).getDocuments { snap, err in
+            if let err = err { completion?(.failure(err)); return }
+            if let snap = snap, !snap.isEmpty { completion?(.success(())); return }
+            // Create a placeholder doc
+            regionalInfoDeviceCollection.document("inforegionais").setData(["createdAt": FieldValue.serverTimestamp()]) { error in
+                if let error = error { completion?(.failure(error)) } else { completion?(.success(())) }
+            }
+        }
+    }
+
+    /// Upserts a single RegionalInfo5-like dictionary into Firestore using a stable UUID string id.
+    /// - Parameters:
+    ///   - id: Stable string identifier used as the Firestore document ID.
+    ///   - data: Keys: nome, chefe, ramal, endereco, updatedAt
+    static func upsertRegionalInfo(id: String, data: [String: Any], completion: ((Result<Void, Error>) -> Void)? = nil) {
+        // Clean potential placeholder if present
+        regionalInfoDeviceCollection.document("inforegionais").getDocument { doc, _ in
+            if let doc, doc.exists {
+                doc.reference.delete(completion: nil)
+            }
+        }
+        regionalInfoDeviceCollection.document(id).setData(data, merge: true) { err in
+            if let err = err { completion?(.failure(err)) } else { completion?(.success(())) }
+        }
+    }
+
+    /// Bulk upsert from an array of dictionaries (id + fields). Fast and idempotent.
+    static func upsertRegionalInfoBatch(items: [(id: String, data: [String: Any])], completion: ((Result<Int, Error>) -> Void)? = nil) {
+        let batch = db.batch()
+        // Clean potential placeholder; we do this outside the batch for simplicity
+        regionalInfoDeviceCollection.document("inforegionais").getDocument { doc, _ in
+            if let doc, doc.exists { doc.reference.delete(completion: nil) }
+            for item in items {
+                let ref = regionalInfoDeviceCollection.document(item.id)
+                batch.setData(item.data, forDocument: ref, merge: true)
+            }
+            batch.commit { err in
+                if let err = err { completion?(.failure(err)) } else { completion?(.success(items.count)) }
+            }
+        }
+    }
+
+    /// Pulls remote regionalinfo and merges into Core Data without requiring a 'remoteID' Core Data attribute.
+    static func syncRegionalInfoFromFirestore(context: NSManagedObjectContext, completion: @escaping (Result<Int, Error>) -> Void) {
+        regionalInfoDeviceCollection.getDocuments { snapshot, error in
+            guard let docs = snapshot?.documents, error == nil else {
+                completion(.failure(error ?? NSError(domain: "Firestore", code: -1)))
+                return
+            }
+
+            var updated = 0
+            context.perform {
+                for doc in docs where doc.documentID != "inforegionais" {
+                    let data = doc.data()
+                    // Removed usage of 'remoteID' attribute completely.
+
+                    // Best-effort find or create RegionalInfo5 without relying on a non-existent 'remoteID' attribute.
+                    let fetch = NSFetchRequest<NSFetchRequestResult>(entityName: "RegionalInfo5")
+                    fetch.fetchLimit = 1
+                    if let nome = data["nome"] as? String, let ramal = data["ramal"] as? String {
+                        fetch.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+                            NSPredicate(format: "nome == %@", nome),
+                            NSPredicate(format: "ramal == %@", ramal)
+                        ])
+                    } else if let nome = data["nome"] as? String {
+                        fetch.predicate = NSPredicate(format: "nome == %@", nome)
+                    } else {
+                        fetch.predicate = nil
+                    }
+
+                    let regional: NSManagedObject
+                    if let existing = try? context.fetch(fetch).first as? NSManagedObject {
+                        regional = existing
+                    } else {
+                        regional = NSEntityDescription.insertNewObject(forEntityName: "RegionalInfo5", into: context)
+                    }
+
+                    // Map fields safely
+                    if let nome = data["nome"] as? String { regional.setValue(nome, forKey: "nome") }
+                    if let chefe = data["chefe"] as? String { regional.setValue(chefe, forKey: "chefe") }
+                    if let ramal = data["ramal"] as? String { regional.setValue(ramal, forKey: "ramal") }
+                    if let endereco = data["endereco"] as? String { regional.setValue(endereco, forKey: "endereco") }
+
+                    updated += 1
+                }
+
+                do { try context.save(); completion(.success(updated)) }
+                catch { completion(.failure(error)) }
+            }
+        }
+    }
+
     // MARK: - MUNICIPIOS (device-scoped: municipios/devices/{deviceID})
     // MARK: --------------------------------------------------------------------
 
@@ -751,32 +855,45 @@ struct FirestoreMigrator {
     ) {
 
         context.perform {
-            do {
-                let request: NSFetchRequest<Municipio> = Municipio.fetchRequest()
-                let municipios = try context.fetch(request)
+            // Ensure the device-scoped municipios collection exists by creating a placeholder doc.
+            let placeholderRef = municipiosDeviceCollection.document("_placeholder_municipios")
+            placeholderRef.setData(["createdAt": FieldValue.serverTimestamp()]) { placeholderError in
+                if let placeholderError = placeholderError {
+                    completion(.failure(placeholderError))
+                    return
+                }
 
-                let group = DispatchGroup()
-                var count = 0
-                var finalError: Error?
+                do {
+                    let request: NSFetchRequest<Municipio> = Municipio.fetchRequest()
+                    let municipios = try context.fetch(request)
 
-                for m in municipios {
-                    group.enter()
-                    uploadMunicipio(objectID: m.objectID, context: context) { result in
-                        switch result {
-                        case .success: count += 1
-                        case .failure(let e): finalError = e
+                    let group = DispatchGroup()
+                    var count = 0
+                    var finalError: Error?
+
+                    for m in municipios {
+                        group.enter()
+                        uploadMunicipio(objectID: m.objectID, context: context) { result in
+                            switch result {
+                            case .success: count += 1
+                            case .failure(let e): finalError = e
+                            }
+                            group.leave()
                         }
-                        group.leave()
                     }
-                }
 
-                group.notify(queue: .main) {
-                    if let err = finalError { completion(.failure(err)) }
-                    else { completion(.success(count)) }
-                }
+                    group.notify(queue: .main) {
+                        // Best-effort: remove the placeholder; the collection remains created.
+                        placeholderRef.delete(completion: nil)
+                        if let err = finalError { completion(.failure(err)) }
+                        else { completion(.success(count)) }
+                    }
 
-            } catch {
-                completion(.failure(error))
+                } catch {
+                    // Best-effort cleanup of placeholder on early failure.
+                    placeholderRef.delete(completion: nil)
+                    completion(.failure(error))
+                }
             }
         }
     }
@@ -941,6 +1058,160 @@ struct FirestoreMigrator {
                 }
             }
         }
+    }
+    
+    /// Migrates RegionalInfo5 Core Data entities to Firestore (device scoped) asynchronously.
+    /// - Parameter context: NSManagedObjectContext to read RegionalInfo5 from.
+    /// - Returns: Number of regional docs upserted.
+    @discardableResult
+    static func migrateRegionalInfotoFirestoreAsync(from context: NSManagedObjectContext) async throws -> Int {
+        return try await withCheckedThrowingContinuation { continuation in
+            context.perform {
+                let fetch = NSFetchRequest<NSManagedObject>(entityName: "RegionalInfo5")
+                do {
+                    let items = try context.fetch(fetch)
+                    let batch = db.batch()
+                    var count = 0
+
+                    // Force-create the collection "regionaisinfo" by writing a placeholder doc first.
+                    // We use a distinct placeholder id to avoid clashing with existing logic.
+                    let placeholderRef = regionalInfoDeviceCollection.document("_placeholder_regionais")
+                    placeholderRef.setData(["createdAt": FieldValue.serverTimestamp()]) { placeholderError in
+                        if let placeholderError = placeholderError {
+                            continuation.resume(throwing: placeholderError)
+                            return
+                        }
+
+                        // Clean legacy placeholder if present (best-effort, not awaited here)
+                        regionalInfoDeviceCollection.document("inforegionais").getDocument { doc, _ in
+                            if let doc, doc.exists { doc.reference.delete(completion: nil) }
+
+                            for obj in items {
+                                let nome = obj.value(forKey: "nome") as? String ?? ""
+                                let chefe = obj.value(forKey: "chefe") as? String
+                                let ramal = obj.value(forKey: "ramal") as? String
+                                let endereco = obj.value(forKey: "endereco") as? String
+
+                                // Build a stable ID. Prefer a normalized name+ramal key.
+                                let idBase = "\(nome)|\(ramal ?? "-")"
+                                let id = idBase
+                                    .replacingOccurrences(of: "/", with: "_")
+                                    .trimmingCharacters(in: .whitespacesAndNewlines)
+
+                                var data: [String: Any] = [
+                                    "nome": nome
+                                ]
+                                if let chefe { data["chefe"] = chefe }
+                                if let ramal { data["ramal"] = ramal }
+                                if let endereco { data["endereco"] = endereco }
+                                data["updatedAt"] = FieldValue.serverTimestamp()
+
+                                let ref = regionalInfoDeviceCollection.document(id)
+                                batch.setData(data, forDocument: ref, merge: true)
+                                count += 1
+                            }
+
+                            batch.commit { err in
+                                // Best-effort: remove the placeholder now that the collection definitely exists
+                                placeholderRef.delete(completion: nil)
+
+                                if let err = err {
+                                    continuation.resume(throwing: err)
+                                } else {
+                                    continuation.resume(returning: count)
+                                }
+                            }
+                        }
+                    }
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+}
+    enum MigrationError: Error {
+        case firestoreUnavailable
+        case decodingFailed
+    }
+
+    // A lightweight DTO to decode Firestore documents without depending on your Core Data model shape.
+    struct MunicipioDTO: Codable {
+        let id: String
+        let nome: String?
+        let regional: String?
+    }
+
+    // Helper to find or create a Municipio by stable string id stored in "remoteID" attribute.
+    private func findOrCreateMunicipio(remoteID: String, in context: NSManagedObjectContext) throws -> Municipio {
+        let fetch: NSFetchRequest<Municipio> = Municipio.fetchRequest()
+        fetch.fetchLimit = 1
+        // Assuming your Core Data model has a string attribute named "remoteID" to keep a stable external identifier.
+        // If your model uses another attribute name, rename the key below accordingly.
+        fetch.predicate = NSPredicate(format: "remoteID == %@", remoteID)
+        if let existing = try context.fetch(fetch).first {
+            return existing
+        }
+        let entity = Municipio(context: context)
+        // Store the remote identifier for future upserts.
+        entity.setValue(remoteID, forKey: "remoteID")
+        return entity
+    }
+
+extension FirestoreMigrator {
+    
+    
+    func migrateMunicipiosIfNeeded(context: NSManagedObjectContext) async throws -> Bool {
+        
+#if canImport(FirebaseFirestore)
+        // Obtain a Firestore instance.
+        let db = Firestore.firestore()
+        
+        // Fetch all documents in the "Municipio" collection.
+        let documents: [QueryDocumentSnapshot]
+        do {
+            documents = try await withCheckedThrowingContinuation { continuation in
+                db.collection("Municipio").getDocuments { snap, error in
+                    if let error = error {
+                        continuation.resume(throwing: error)
+                        return
+                    }
+                    guard let snap = snap else {
+                        continuation.resume(throwing: NSError(domain: "FirestoreMigrator", code: -1001, userInfo: [NSLocalizedDescriptionKey: "No snapshot returned"]))
+                        return
+                    }
+                    continuation.resume(returning: snap.documents)
+                }
+            }
+        } catch {
+            throw error
+        }
+        
+        var didChange = false
+        
+        for doc in documents {
+            let data = doc.data()
+            // Extract fields safely. Adapt keys if your Firestore uses different names.
+            let id = doc.documentID
+            let nome = data["nome"] as? String
+            let regional = data["regional"] as? String
+            
+            // Upsert into Core Data
+            let municipio = try findOrCreateMunicipio(remoteID: id, in: context)
+            municipio.nome = nome
+            municipio.regional = regional
+            didChange = true
+        }
+        
+        if context.hasChanges {
+            try context.save()
+        }
+        return didChange
+        
+#else
+        // Firebase Firestore framework not available at build time
+        throw MigrationError.firestoreUnavailable
+#endif
     }
 }
 

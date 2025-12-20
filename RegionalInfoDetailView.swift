@@ -7,6 +7,9 @@
 
 import SwiftUI
 internal import CoreData
+#if canImport(FirebaseFirestore)
+import FirebaseFirestore
+#endif
 
 struct RegionalInfoDetailView: View {
     @ObservedObject var regional: RegionalInfo5  // entidade do Core Data
@@ -66,6 +69,24 @@ struct RegionalInfoDetailView: View {
                 Spacer(minLength: 40)
             }
 
+        }
+        .onAppear {
+            #if canImport(FirebaseFirestore)
+            FirestoreMigrator.ensureRegionalInfoCollectionExists()
+            var data: [String: Any] = [:]
+            if let nome = regional.nome { data["nome"] = nome }
+            if let chefe = regional.chefe { data["chefe"] = chefe }
+            if let ramal = regional.ramal { data["ramal"] = ramal }
+            if let endereco = regional.endereco { data["endereco"] = endereco }
+            data["updatedAt"] = FieldValue.serverTimestamp()
+            let id: String
+            if let remoteID = regional.value(forKey: "remoteID") as? String, !remoteID.isEmpty {
+                id = remoteID
+            } else {
+                id = firestoreSafeID(for: regional.objectID)
+            }
+            FirestoreMigrator.upsertRegionalInfo(id: id, data: data, completion: nil)
+            #endif
         }
         .background(Color(.systemBackground))
         .navigationTitle("Detalhes da Regional")
@@ -161,6 +182,17 @@ struct RegionalInfoDetailView: View {
             // Trigger a minimal state change if needed; usually unnecessary with @ObservedObject
             _ = regional.objectID
         }
+    }
+
+    private func firestoreSafeID(for objectID: NSManagedObjectID) -> String {
+        let uri = objectID.uriRepresentation().absoluteString
+        let data = Data(uri.utf8)
+        var encoded = data.base64EncodedString()
+        encoded = encoded
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        return encoded
     }
 
     @ViewBuilder

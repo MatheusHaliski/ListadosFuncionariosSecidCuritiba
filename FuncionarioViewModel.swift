@@ -14,6 +14,20 @@ import Combine
 
 @MainActor
 final class FuncionarioViewModel: ObservableObject {
+    // A stable identifier for this app installation (persists across launches, changes on reinstall)
+    static let installID: String = {
+        let key = "app.install.id"
+        if let existing = UserDefaults.standard.string(forKey: key) {
+            return existing
+        }
+        let new = UUID().uuidString
+        UserDefaults.standard.set(new, forKey: key)
+        return new
+    }()
+
+    // Tracks whether we've seeded funcionarios for this specific installation already
+    private static let seededKey = "app.install.seeded.funcionarios"
+
     let objectWillChange = ObservableObjectPublisher()
     
     @Published var funcionarios: [Funcionario] = []
@@ -23,6 +37,7 @@ final class FuncionarioViewModel: ObservableObject {
     init() {
         self.objectWillChange.send() // optional early signal; harmless
         self.context = PersistenceController.shared.container.viewContext
+        seedFuncionariosForThisInstallIfNeeded()
         // Defer fetch until after initialization completes
         Task { [weak self] in
             await MainActor.run {
@@ -34,6 +49,7 @@ final class FuncionarioViewModel: ObservableObject {
     init(context: NSManagedObjectContext) {
         self.objectWillChange.send() // optional early signal; harmless
         self.context = context
+        seedFuncionariosForThisInstallIfNeeded()
         Task { [weak self] in
             await MainActor.run {
                 self?.fetchFuncionarios()
@@ -48,8 +64,29 @@ final class FuncionarioViewModel: ObservableObject {
         fetchFuncionarios()
     }
 
+    /// Seeds a fresh set of funcionarios for this installation only once.
+    /// This ensures every install gets its own unique UUIDs for each preloaded Funcionario,
+    /// enabling per-device favorites and state.
+    private func seedFuncionariosForThisInstallIfNeeded() {
+        let seeded = UserDefaults.standard.bool(forKey: Self.seededKey)
+        guard seeded == false else { return }
+
+        // Build the baseline dataset by calling the regional population helpers.
+        // These helpers already create new Funcionario with fresh UUIDs.
+        // We run them unconditionally on first launch of this installation.
+        popularNucleos(context: context)
+
+        // Persist the flag so we don't reseed on every app launch, only per install.
+        UserDefaults.standard.set(true, forKey: Self.seededKey)
+
+        // Optionally: annotate each newly created Funcionario with this install ID via a transient field if you have one.
+        // If you later upload to Firestore, you can include `deviceInstallId: Self.installID`.
+    }
+
     func fetchFuncionarios() {
         let request: NSFetchRequest<Funcionario> = Funcionario.fetchRequest()
+        // Filter to only show the instances created for this installation
+        request.predicate = NSPredicate(format: "nome BEGINSWITH %@", Self.installID + " | ")
         do {
             funcionarios = try context.fetch(request)
         } catch {
@@ -123,7 +160,8 @@ final class FuncionarioViewModel: ObservableObject {
                             "celular": "",
                             "email": "",
                             "imagemURL": NSNull(),
-                            "imagem": NSNull()
+                            "imagem": NSNull(),
+                            "deviceInstallId": FuncionarioViewModel.installID
                         ]
 
                         if let uuid = funcionario.id?.uuidString, !uuid.isEmpty {
@@ -409,27 +447,26 @@ extension FuncionarioViewModel {
         let request: NSFetchRequest<Funcionario> = Funcionario.fetchRequest()
         request.predicate = NSPredicate(format: "regional == %@", nomeRegional)
 
-        if let count = try? context.count(for: request), count == 0 {
-            print("🔹 Populando Núcleo Regional de \(nomeRegional)...")
+        print("🔹 Populando Núcleo Regional de \(nomeRegional) para esta instalação (sempre cria novas instâncias)...")
 
-            for (nome, funcao) in lista {
-                let novo = Funcionario(context: context)
-                novo.id = UUID()
-                novo.nome = nome
-                novo.funcao = funcao
-                novo.regional = nomeRegional
-                novo.email = ""
-                novo.celular = ""
-                novo.ramal = ""
-            }
+        for (nome, funcao) in lista {
+            let novo = Funcionario(context: context)
+            novo.id = UUID() // sempre um novo UUID por instalação
+            novo.nome = "\(Self.installID) | \(nome)"
+            // Note: We prefix the name with the per-install installID so we can filter locally without schema changes.
+            novo.funcao = funcao
+            novo.regional = nomeRegional
+            novo.email = ""
+            novo.celular = ""
+            novo.ramal = ""
+        }
 
-            do {
-                try context.save()
-                print("✅ Núcleo Regional de \(nomeRegional) inserido com sucesso.")
-                fetchFuncionarios()
-            } catch {
-                print("❌ Erro ao salvar dados iniciais de \(nomeRegional): \(error)")
-            }
+        do {
+            try context.save()
+            print("✅ Núcleo Regional de \(nomeRegional) inserido com sucesso (novas instâncias por instalação).")
+            fetchFuncionarios()
+        } catch {
+            print("❌ Erro ao salvar dados iniciais de \(nomeRegional): \(error)")
         }
     }
 }
@@ -554,6 +591,7 @@ extension FuncionarioViewModel {
             obj.setValue(chefe, forKey: "chefe")
             obj.setValue(ramal, forKey: "ramal")
             obj.setValue(endereco, forKey: "endereco")
+            obj.setValue(UUID(), forKey: "remoteID")
         }
 
         do {
@@ -565,3 +603,4 @@ extension FuncionarioViewModel {
     }
 
 }
+

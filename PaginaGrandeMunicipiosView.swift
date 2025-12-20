@@ -66,6 +66,24 @@ struct PaginaGrandeMunicipiosView: View {
         print("[Firebase] Deleting \(entity) with id: \(id)")
     }
 
+    // MARK: - FUNÇÃO ASSÍNCRONA PARA SINCRONIZAR MUNICÍPIOS
+    private func syncMunicipios() async {
+        do {
+            // Chamada assíncrona para migrar/sincronizar municipios do Firebase
+            try await FirestoreMigrator().migrateMunicipiosIfNeeded(context: context)
+            if context.hasChanges {
+                try context.save()
+            }
+            // Forçar UI refresh no main thread (FetchRequest fará o reload automático)
+            await MainActor.run {
+                _ = municipios.count
+            }
+            print("[syncMunicipios] Sincronização (upsert) concluída com sucesso.")
+        } catch {
+            print("[syncMunicipios] Falha ao sincronizar (upsert) do Firebase, mantendo dados locais: \(error.localizedDescription)")
+        }
+    }
+
     // MARK: - BODY
     var body: some View {
         NavigationStack {
@@ -73,8 +91,11 @@ struct PaginaGrandeMunicipiosView: View {
                 content
             }
             .navigationTitle("Municípios")
-#if DEBUG
+            .task {
+                await syncMunicipios()
+            }
             .toolbar {
+#if DEBUG
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(role: .destructive) {
                         showPurgeConfirmation = true
@@ -83,7 +104,18 @@ struct PaginaGrandeMunicipiosView: View {
                     }
                     .accessibilityLabel("Limpar todas as regionais")
                 }
+#endif
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        Task {
+                            await syncMunicipios()
+                        }
+                    } label: {
+                        Text("Baixar Municípios")
+                    }
+                }
             }
+#if DEBUG
             .confirmationDialog(
                 "Deseja deletar a tabela de municipio?",
                 isPresented: $showPurgeConfirmation,
@@ -361,3 +393,4 @@ struct ZoomableScrollView5<Content: View>: UIViewRepresentable {
         }
     }
 }
+

@@ -82,6 +82,7 @@ struct PersistenceController {
             // This keeps "Ver Municípios" populated even when the app is installed outside Xcode.
             let municipioVM = MunicipioViewModel(context: container.viewContext)
             municipioVM.popularMunicipiosSeNecessario()
+            municipioVM.popularRegionalInfoSeNecessario()
         }
 
         // Assign to the stored property only after configuration

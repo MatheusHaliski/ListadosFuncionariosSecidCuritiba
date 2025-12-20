@@ -357,7 +357,7 @@ struct CardRowSimple11: View {
                 } placeholder: {
                     ZStack {
                         Circle().fill(Color(.systemGray5))
-                        Text(String(funcionario.nome?.first ?? "F"))
+                        Text(String(parseName(funcionario.nome).first ?? "F"))
                             .font(.system(size: 22 * zoom))
                             .foregroundColor(.primary)
                     }
@@ -396,7 +396,7 @@ struct CardRowSimple11: View {
                     )
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Nome: \(funcionario.nome ?? "(Sem nome)")")
+                    Text("Nome: \(parseName(funcionario.nome ?? "(Sem nome)"))")
                         .font(.headline)
                     Text("Função: \(funcionario.funcao ?? "")")
                         .font(.headline)
@@ -419,6 +419,14 @@ struct CardRowSimple11: View {
             alignment: .bottom
         )
     }
+}
+// MARK: - NAME PARSING
+private func parseName(_ raw: String?) -> String {
+    let value = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "(Sem nome)"
+    // Split by vertical bar and take the substring after the last bar, if any
+    let parts = value.split(separator: "|", omittingEmptySubsequences: false)
+    let trimmed = (parts.last.map(String.init) ?? value).trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? "(Sem nome)" : trimmed
 }
 
 // MARK: - ZOOMABLE SCROLLVIEW WITH KEYBOARD AUTO-SCROLL BLOCKER

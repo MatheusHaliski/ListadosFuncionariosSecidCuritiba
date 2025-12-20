@@ -30,8 +30,12 @@
     </entity>
     <entity name="RegionalInfo5" representedClassName="RegionalInfo5" syncable="YES" codeGenerationType="class">
         <attribute name="chefe" optional="YES" attributeType="String"/>
+        <attribute name="codigo" optional="YES" attributeType="String"/>
+        <attribute name="descricao" optional="YES" attributeType="String"/>
         <attribute name="endereco" optional="YES" attributeType="String"/>
         <attribute name="nome" optional="YES" attributeType="String"/>
+        <attribute name="ordem" optional="YES" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="ramal" optional="YES" attributeType="String"/>
+        <attribute name="remoteID" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
     </entity>
 </model>

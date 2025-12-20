@@ -1,5 +1,8 @@
 import SwiftUI
 internal import CoreData
+#if canImport(FirebaseCore)
+import FirebaseCore
+#endif
 
 // MARK: - Shared Zoom Environment
 private struct AppZoomScaleKey: EnvironmentKey {
@@ -37,7 +40,7 @@ extension View {
 
 // MARK: - Zoom Controls Modifier (top placement)
 private struct ZoomControlsModifier: ViewModifier {
-    @AppStorage("app_zoom_scale") private var persistedZoom: Double = 1.35
+    @AppStorage("app_zoom_scale") private var persistedZoom: Double = 1.0
 
     func body(content: Content) -> some View {
         content
@@ -237,6 +240,32 @@ struct HomeView: View {
                 }
             }
         }
+        .task { @MainActor in
+            // Run municipios migration on app start from HomeView
+            #if canImport(FirebaseCore)
+            if FirebaseApp.app() == nil {
+                if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
+                    FirebaseApp.configure()
+                }
+            }
+            #endif
+
+            do {
+                let migrated = try await FirestoreMigrator.migrateMunicipiosToFirestoreAsync(from: viewContext)
+                print("[HomeView] Migrated municipios to Firestore on startup. Count: \(migrated)")
+            } catch {
+                print("[HomeView] Failed to migrate municipios on startup: \(error)")
+            }
+
+            do {
+                let regionalCount = try await FirestoreMigrator.migrateRegionalInfotoFirestoreAsync(from: viewContext)
+                print("[HomeView] Migrated regional info to Firestore on startup. Count: \(regionalCount)")
+            } catch {
+                print("[HomeView] Failed to migrate regional info on startup: \(error)")
+            }
+
+            FirestoreMigrator.schedulePostStartupSanitization(delaySeconds: 3)
+        }
         .environmentObject(navState)
     }
 
@@ -361,3 +390,4 @@ struct ZoomableScrollView3<Content: View>: UIViewRepresentable {
         }
     }
 }
+

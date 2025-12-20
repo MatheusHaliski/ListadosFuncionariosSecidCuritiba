@@ -93,6 +93,30 @@ struct MunicipioDetailView: View {
                         Spacer()
                     }
                     .padding(16)
+
+                    Divider()
+                        .overlay(Color.black.opacity(0.08))
+
+                    // Row: UUID
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        Image(systemName: "number")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(.tint)
+                            .frame(width: 24)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("UUID")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                            Text((municipio.id as? UUID)?.uuidString ?? ((municipio.id as? NSUUID).map { ($0 as UUID).uuidString } ?? "—"))
+                                .font(.system(size: 14, weight: .regular))
+                                .foregroundStyle(.primary)
+                                .textSelection(.enabled)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                        Spacer()
+                    }
+                    .padding(16)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(
@@ -131,10 +155,24 @@ struct MunicipioDetailView: View {
     }
 
     private func toggleFavorite() {
+        let newValue = !municipio.favorito
         withAnimation {
-            municipio.favorito.toggle()
+            // Optimistic UI update
+            municipio.favorito = newValue
             do { try viewContext.save() } catch { print("Erro ao salvar favorito: \(error)") }
-            NotificationCenter.default.post(name: .funcionarioAtualizado, object: nil)
+        }
+        // Push to Firestore and log on success
+        FirestoreMigrator.updateMunicipioFavorito(
+            objectID: municipio.objectID,
+            favorito: newValue,
+            context: viewContext
+        ) { result in
+            switch result {
+            case .success:
+                NotificationCenter.default.post(name: .funcionarioAtualizado, object: nil)
+            case .failure(let err):
+                print("[Detail] Falha ao atualizar favorito no Firestore: \(err)")
+            }
         }
     }
 }

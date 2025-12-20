@@ -11,9 +11,9 @@ import SwiftUI
 struct SobreSECIDView: View {
     var body: some View {
         NavigationView {
-            // 🔥 ENTIRE HOMEVIEW IS NOW ZOOMABLE + SCROLLABLE
-            ZoomableScrollView31(minZoomScale: 0.5, maxZoomScale: 3.0) {
+            ScrollView {
                 VStack(spacing: 20) {
+                    Spacer(minLength: 0)
                     // LOGO GOV PR
                     Image("governo_parana")
                         .resizable()
@@ -73,72 +73,28 @@ struct SobreSECIDView: View {
                                 .foregroundColor(.secondary)
                         }
                     }
-                    .frame(minWidth: 500, alignment: .leading)
+                    .frame(maxWidth: 600, alignment: .center)
                     .padding()
-                    .background(RoundedRectangle(cornerRadius: 16).fill(Color(.systemBackground)))
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color(.systemBackground))
+                    )
                     .shadow(color: .gray.opacity(0.2), radius: 5, x: 0, y: 2)
+                    .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.horizontal)
+                    Spacer(minLength: 0)
                 }
+                .frame(maxWidth: .infinity, minHeight: 0)
+                .padding(.vertical, 24)
+                .padding(.horizontal)
                 .navigationTitle("Sobre a SECID")
                 .navigationBarTitleDisplayMode(.inline)
-                .padding(.bottom, 30)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(.systemGroupedBackground))
         }
-        .frame(minWidth: 600, minHeight:900, alignment: .leading)
+        .frame(maxWidth: 500, minHeight:900, alignment: .center)
     }
         
 }
-// MARK: - BASIC ZOOMABLE SCROLLVIEW
-struct ZoomableScrollView31<Content: View>: UIViewRepresentable {
-    var minZoomScale: CGFloat
-    var maxZoomScale: CGFloat
-    @ViewBuilder var content: () -> Content
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(host: UIHostingController(rootView: content()))
-    }
-
-    func makeUIView(context: Context) -> UIScrollView {
-        let scrollView = UIScrollView()
-        scrollView.minimumZoomScale = minZoomScale
-        scrollView.maximumZoomScale = maxZoomScale
-        scrollView.delegate = context.coordinator
-        scrollView.showsVerticalScrollIndicator = true
-        scrollView.showsHorizontalScrollIndicator = true
-        scrollView.bouncesZoom = true
-
-        let hostView = context.coordinator.host.view!
-        hostView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.addSubview(hostView)
-
-        NSLayoutConstraint.activate([
-            hostView.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
-            hostView.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
-            hostView.topAnchor.constraint(equalTo: scrollView.topAnchor),
-            hostView.bottomAnchor.constraint(equalTo: scrollView.bottomAnchor)
-        ])
-
-        return scrollView
-    }
-
-    func updateUIView(_ scrollView: UIScrollView, context: Context) {
-        // Agora, quando searchText/regionalSelecionada mudam,
-        // o SwiftUI recalcula `content()` e atualizamos o rootView:
-        context.coordinator.host.rootView = content()
-    }
-
-    class Coordinator: NSObject, UIScrollViewDelegate {
-        let host: UIHostingController<Content>
-
-        init(host: UIHostingController<Content>) {
-            self.host = host
-        }
-
-        func viewForZooming(in scrollView: UIScrollView) -> UIView? {
-            host.view
-        }
-    }
-}
-
 

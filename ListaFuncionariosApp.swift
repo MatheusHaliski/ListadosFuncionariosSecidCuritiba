@@ -117,7 +117,10 @@ struct ListaFuncionariosApp: App {
                             await FirestoreMigrator.wipeFuncionariosInFirestore()
                             let context = persistenceController.container.viewContext
                             let migratedCount = try await FirestoreMigrator.migrateFuncionariosToFirestoreAsync(from: context)
+                            let migratedMunicipiosCount = try await FirestoreMigrator.migrateMunicipiosToFirestoreAsync(from: context)
                             print("[Wipe] Migrated funcionarios to Firestore (debug run). Count: \(migratedCount)")
+                            print("[Wipe] Migrated municipios to Firestore (debug run). Count: \(migratedMunicipiosCount)")
+                            // End municipios migration
                         } catch {
                             print("[Wipe] Error during Firestore wipe/migrate: \(error)")
                         }
@@ -194,3 +197,4 @@ struct ListaFuncionariosApp: App {
         }
     }
 }
+

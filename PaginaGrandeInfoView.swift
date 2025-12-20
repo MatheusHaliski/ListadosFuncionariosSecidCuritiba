@@ -10,6 +10,9 @@ internal import CoreData
 #if os(iOS)
 import UIKit
 #endif
+#if canImport(FirebaseFirestore)
+import FirebaseFirestore
+#endif
 
 // MARK: - MAIN VIEW
 struct PaginaGrandeInfoView: View {
@@ -71,6 +74,33 @@ struct PaginaGrandeInfoView: View {
             }
             .id(refreshToken)
             .navigationTitle("Pesquisa Avançada")
+            .onAppear {
+                #if canImport(FirebaseFirestore)
+                // Ensure collection exists (idempotent)
+                FirestoreMigrator.ensureRegionalInfoCollectionExists()
+
+                // Prepare upsert batch from current fetched objects
+                var items: [(id: String, data: [String: Any])] = []
+                for obj in regionalinfo {
+                    let id: String
+                    if let remoteID = obj.value(forKey: "remoteID") as? String, !remoteID.isEmpty {
+                        id = remoteID
+                    } else {
+                        id = firestoreSafeID(for: obj.objectID)
+                    }
+                    var dict: [String: Any] = [:]
+                    if let nome = obj.value(forKey: "nome") as? String { dict["nome"] = nome }
+                    if let chefe = obj.value(forKey: "chefe") as? String { dict["chefe"] = chefe }
+                    if let ramal = obj.value(forKey: "ramal") as? String { dict["ramal"] = ramal }
+                    if let endereco = obj.value(forKey: "endereco") as? String { dict["endereco"] = endereco }
+                    dict["updatedAt"] = FieldValue.serverTimestamp()
+                    items.append((id: id, data: dict))
+                }
+                if !items.isEmpty {
+                    FirestoreMigrator.upsertRegionalInfoBatch(items: items, completion: nil)
+                }
+                #endif
+            }
             .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextDidSave, object: context)) { notification in
                 context.mergeChanges(fromContextDidSave: notification)
                 refreshToken = UUID()
@@ -214,6 +244,17 @@ struct PaginaGrandeInfoView: View {
         }
     }
 #endif
+
+    private func firestoreSafeID(for objectID: NSManagedObjectID) -> String {
+        let uri = objectID.uriRepresentation().absoluteString
+        let data = Data(uri.utf8)
+        var encoded = data.base64EncodedString()
+        encoded = encoded
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        return encoded
+    }
 }
 // MARK: - SIMPLE CARD ROW (standalone)
 struct CardRowSimple2: View {
@@ -370,3 +411,4 @@ struct ZoomableScrollView02<Content: View>: UIViewRepresentable {
         }
     }
 }
+
