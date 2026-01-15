@@ -15,6 +15,18 @@ import FirebaseCrashlytics
 import FirebaseAppCheck
 #endif
 
+#if canImport(FirebaseAuth)
+import FirebaseAuth
+#endif
+
+#if canImport(FirebaseInstallations)
+import FirebaseInstallations
+#endif
+
+class AuthState: ObservableObject {
+    @Published var isAuthenticated: Bool = false
+}
+
 // MARK: - AppDelegate
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
@@ -42,7 +54,6 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         AppCheck.setAppCheckProviderFactory(AppCheckDebugProviderFactory())
         #else
         print("[AppCheck] RELEASE MODE — App Attest ENABLED")
-        AppCheck.setAppCheckProviderFactory(AppAttestProviderFactory())
         #endif
         #endif
         // -----------------------------------------------------------
@@ -55,6 +66,17 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
                 FirebaseApp.configure()
                 print("[Firebase] FirebaseApp.configure() called.")
+                #if canImport(FirebaseAuth)
+                if Auth.auth().currentUser == nil {
+                    Auth.auth().signInAnonymously { result, error in
+                        if let error = error {
+                            print("[FirebaseAuth] Anonymous sign-in failed: \(error)")
+                        } else {
+                            print("[FirebaseAuth] Signed in anonymously: \(result?.user.uid ?? "?")")
+                        }
+                    }
+                }
+                #endif
             } else {
                 print("[Firebase] GoogleService-Info.plist not found.")
             }
@@ -84,6 +106,11 @@ struct ListaFuncionariosApp: App {
         context: PersistenceController.shared.container.viewContext
     )
     @StateObject private var zoomManager = ZoomManager()
+    @StateObject private var authState = AuthState()
+    @State private var showInstallAlert = false
+    @State private var installIDMessage: String? = nil
+
+    private let didShowInstallAlertKey = "didShowInstallAlertKey"
 
     init() {
         // Estilo
@@ -103,8 +130,109 @@ struct ListaFuncionariosApp: App {
                 HomeView()
             }
             .task {
+                guard !authState.isAuthenticated else { return }
+
+                #if canImport(FirebaseCore)
+                if FirebaseApp.app() == nil {
+                    if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
+                        FirebaseApp.configure()
+                        print("[Firebase] FirebaseApp.configure() called.")
+                    } else {
+                        print("[Firebase] GoogleService-Info.plist not found.")
+                    }
+                }
+                #endif
+
+                #if canImport(FirebaseAuth)
+                if Auth.auth().currentUser == nil {
+                    await withCheckedContinuation { continuation in
+                        Auth.auth().signInAnonymously { result, error in
+                            if let error = error {
+                                print("[FirebaseAuth] Anonymous sign-in failed: \(error)")
+                            } else {
+                                print("[FirebaseAuth] Signed in anonymously: \(result?.user.uid ?? "?")")
+                                Task { @MainActor in authState.isAuthenticated = true }
+                            }
+                            continuation.resume()
+                        }
+                    }
+                } else {
+                    Task { @MainActor in authState.isAuthenticated = true }
+                }
+                #else
+                // If no FirebaseAuth, always allow
+                authState.isAuthenticated = true
+                #endif
+
+                // Show install ID on first install
+                let alreadyShown = UserDefaults.standard.bool(forKey: didShowInstallAlertKey)
+                guard !alreadyShown else { return }
+
+                #if canImport(FirebaseInstallations)
+                // Ensure Firebase is configured before requesting Installation ID
+                #if canImport(FirebaseCore)
+                if FirebaseApp.app() == nil {
+                    if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
+                        FirebaseApp.configure()
+                    }
+                }
+                #endif
+
+                Installations.installations().installationID { id, error in
+                    let msg: String
+                    if let error = error {
+                        msg = "Successfully installed data on firebase. Installid: (error: \(error.localizedDescription))"
+                    } else if let id = id {
+                        msg = "Successfully installed data on firebase. Installid: \(id)"
+                    } else {
+                        msg = "Successfully installed data on firebase. Installid: unavailable"
+                    }
+                    Task { @MainActor in
+                        self.installIDMessage = msg
+                        self.showInstallAlert = true
+                        UserDefaults.standard.set(true, forKey: didShowInstallAlertKey)
+                    }
+                }
+                #else
+                // FirebaseInstallations not available; still show a generic message once
+                Task { @MainActor in
+                    self.installIDMessage = "Successfully installed data on firebase. Installid: unavailable"
+                    self.showInstallAlert = true
+                    UserDefaults.standard.set(true, forKey: didShowInstallAlertKey)
+                }
+                #endif
+            }
+            .task(id: authState.isAuthenticated) {
+                guard authState.isAuthenticated else { return }
+
                 SecurityConfigurator.applyFileProtection()
                 let context = persistenceController.container.viewContext
+
+                // -----------------------------------------------------------
+                // 🔥 Firebase (configurar UMA ÚNICA VEZ)
+                // -----------------------------------------------------------
+                #if canImport(FirebaseCore)
+                if FirebaseApp.app() == nil {
+                    if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
+                        FirebaseApp.configure()
+                        print("[Firebase] FirebaseApp.configure() called.")
+                        #if canImport(FirebaseAuth)
+                        if Auth.auth().currentUser == nil {
+                            Auth.auth().signInAnonymously { result, error in
+                                if let error = error {
+                                    print("[FirebaseAuth] Anonymous sign-in failed: \(error)")
+                                } else {
+                                    print("[FirebaseAuth] Signed in anonymously: \(result?.user.uid ?? "?")")
+                                }
+                            }
+                        }
+                        #endif
+                    } else {
+                        print("[Firebase] GoogleService-Info.plist not found.")
+                    }
+                }
+                #endif
+                // -----------------------------------------------------------
 
                 // -----------------------------------------------------------
                 // 🧪 DEBUG: wipe/migrate only when running from Xcode
@@ -207,9 +335,14 @@ struct ListaFuncionariosApp: App {
             .environment(\.managedObjectContext, persistenceController.container.viewContext)
             .environmentObject(funcionarioVM)
             .environmentObject(zoomManager)
+            .environmentObject(authState)
             .accentColor(.accentColor)
             .modifier(AppThemeModifier())
+            .alert("Installation", isPresented: $showInstallAlert, actions: {
+                Button("OK", role: .cancel) { }
+            }, message: {
+                Text(installIDMessage ?? "Successfully installed data on firebase.")
+            })
         }
     }
 }
-
