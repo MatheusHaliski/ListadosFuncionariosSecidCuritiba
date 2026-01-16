@@ -1,4 +1,5 @@
 import SwiftUI
+import CryptoKit
 
 #if canImport(FirebaseCore)
 import FirebaseCore
@@ -14,6 +15,9 @@ struct AuthView: View {
     @State private var didTapGoogleSignIn = false
     @State private var isAuthenticating = false
     @State private var errorMessage: String? = nil
+
+    private let demoPinSalt = "demo-salt-2025"
+    private let demoPinHash = "2922a14c4508aa5e838d9bddb4cf4b9676eadfdc742215d7d285d6ee51bba8e8"
 
     private var isFormValid: Bool {
         didTapGoogleSignIn && pinCode.count == 4
@@ -117,6 +121,12 @@ struct AuthView: View {
         isAuthenticating = true
         errorMessage = nil
 
+        guard hashedPin(pinCode) == demoPinHash else {
+            isAuthenticating = false
+            errorMessage = "Invalid PIN code. Please try again."
+            return
+        }
+
         #if canImport(FirebaseCore)
         if FirebaseApp.app() == nil {
             if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
@@ -151,5 +161,11 @@ struct AuthView: View {
     private func filteredPin(from value: String) -> String {
         let digits = value.filter { $0.isNumber }
         return String(digits.prefix(4))
+    }
+
+    private func hashedPin(_ pin: String) -> String {
+        let saltedPin = demoPinSalt + pin
+        let digest = SHA256.hash(data: Data(saltedPin.utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
     }
 }
