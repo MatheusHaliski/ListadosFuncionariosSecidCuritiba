@@ -127,83 +127,52 @@ struct ListaFuncionariosApp: App {
     var body: some Scene {
         WindowGroup {
             ZStack(alignment: .centerFirstTextBaseline) {
-                HomeView()
-            }
-            .task {
-                guard !authState.isAuthenticated else { return }
-
-                #if canImport(FirebaseCore)
-                if FirebaseApp.app() == nil {
-                    if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
-                        FirebaseApp.configure()
-                        print("[Firebase] FirebaseApp.configure() called.")
-                    } else {
-                        print("[Firebase] GoogleService-Info.plist not found.")
-                    }
-                }
-                #endif
-
-                #if canImport(FirebaseAuth)
-                if Auth.auth().currentUser == nil {
-                    await withCheckedContinuation { continuation in
-                        Auth.auth().signInAnonymously { result, error in
-                            if let error = error {
-                                print("[FirebaseAuth] Anonymous sign-in failed: \(error)")
-                            } else {
-                                print("[FirebaseAuth] Signed in anonymously: \(result?.user.uid ?? "?")")
-                                Task { @MainActor in authState.isAuthenticated = true }
-                            }
-                            continuation.resume()
-                        }
-                    }
+                if authState.isAuthenticated {
+                    HomeView()
                 } else {
-                    Task { @MainActor in authState.isAuthenticated = true }
+                    AuthView()
                 }
-                #else
-                // If no FirebaseAuth, always allow
-                authState.isAuthenticated = true
-                #endif
-
-                // Show install ID on first install
-                let alreadyShown = UserDefaults.standard.bool(forKey: didShowInstallAlertKey)
-                guard !alreadyShown else { return }
-
-                #if canImport(FirebaseInstallations)
-                // Ensure Firebase is configured before requesting Installation ID
-                #if canImport(FirebaseCore)
-                if FirebaseApp.app() == nil {
-                    if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
-                        FirebaseApp.configure()
-                    }
-                }
-                #endif
-
-                Installations.installations().installationID { id, error in
-                    let msg: String
-                    if let error = error {
-                        msg = "Successfully installed data on firebase. Installid: (error: \(error.localizedDescription))"
-                    } else if let id = id {
-                        msg = "Successfully installed data on firebase. Installid: \(id)"
-                    } else {
-                        msg = "Successfully installed data on firebase. Installid: unavailable"
-                    }
-                    Task { @MainActor in
-                        self.installIDMessage = msg
-                        self.showInstallAlert = true
-                        UserDefaults.standard.set(true, forKey: didShowInstallAlertKey)
-                    }
-                }
-                #else
-                // FirebaseInstallations not available; still show a generic message once
-                Task { @MainActor in
-                    self.installIDMessage = "Successfully installed data on firebase. Installid: unavailable"
-                    self.showInstallAlert = true
-                    UserDefaults.standard.set(true, forKey: didShowInstallAlertKey)
-                }
-                #endif
             }
             .task(id: authState.isAuthenticated) {
                 guard authState.isAuthenticated else { return }
+
+                // Show install ID on first install
+                let alreadyShown = UserDefaults.standard.bool(forKey: didShowInstallAlertKey)
+                if !alreadyShown {
+                    #if canImport(FirebaseInstallations)
+                    // Ensure Firebase is configured before requesting Installation ID
+                    #if canImport(FirebaseCore)
+                    if FirebaseApp.app() == nil {
+                        if Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil {
+                            FirebaseApp.configure()
+                        }
+                    }
+                    #endif
+
+                    Installations.installations().installationID { id, error in
+                        let msg: String
+                        if let error = error {
+                            msg = "Successfully installed data on firebase. Installid: (error: \(error.localizedDescription))"
+                        } else if let id = id {
+                            msg = "Successfully installed data on firebase. Installid: \(id)"
+                        } else {
+                            msg = "Successfully installed data on firebase. Installid: unavailable"
+                        }
+                        Task { @MainActor in
+                            self.installIDMessage = msg
+                            self.showInstallAlert = true
+                            UserDefaults.standard.set(true, forKey: didShowInstallAlertKey)
+                        }
+                    }
+                    #else
+                    // FirebaseInstallations not available; still show a generic message once
+                    Task { @MainActor in
+                        self.installIDMessage = "Successfully installed data on firebase. Installid: unavailable"
+                        self.showInstallAlert = true
+                        UserDefaults.standard.set(true, forKey: didShowInstallAlertKey)
+                    }
+                    #endif
+                }
 
                 SecurityConfigurator.applyFileProtection()
                 let context = persistenceController.container.viewContext
