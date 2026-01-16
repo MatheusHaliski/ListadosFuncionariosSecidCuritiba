@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 internal import CoreData
 #if canImport(FirebaseCore)
 import FirebaseCore
@@ -96,6 +97,9 @@ struct HomeView: View {
     @State private var mostrandoGraficoFuncionarios = false
     @State private var mostrandoGraficoMunicipios = false
     @State private var selectedRegional: String = ""
+    @State private var exportURLs: [URL] = []
+    @State private var showingCSVExport = false
+    @State private var exportErrorMessage: String? = nil
     @AppStorage("app_zoom_scale") private var persistedZoom: Double = 1.0
     @StateObject var navState = AppNavigationState()
 
@@ -138,6 +142,22 @@ struct HomeView: View {
                                         .font(.headline)
                                         .foregroundColor(.secondary)
                                 }
+
+                                Button(action: { exportarTabelasCSV() }) {
+                                    Label("Baixar tabelas (.csv)", systemImage: "tray.and.arrow.down")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundColor(.white)
+                                        .padding(.vertical, 10)
+                                        .padding(.horizontal, 16)
+                                        .background(
+                                            LinearGradient(colors: [Color.blue, Color.indigo],
+                                                           startPoint: .topLeading,
+                                                           endPoint: .bottomTrailing)
+                                        )
+                                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                        .shadow(color: Color.black.opacity(0.12), radius: 6, x: 0, y: 3)
+                                }
+                                .accessibilityLabel("Baixar tabelas de funcionários e municípios em CSV")
 
                                 // 🔹 Botão Adicionar Funcionário
                                 Button(action: {
@@ -197,7 +217,22 @@ struct HomeView: View {
             .appZoomScale(CGFloat(persistedZoom))
             .scaleEffect(persistedZoom)
             .animation(.easeInOut, value: persistedZoom)
-
+            .sheet(isPresented: $showingCSVExport) {
+                ActivityView(activityItems: exportURLs)
+            }
+            .alert("Falha ao exportar CSV",
+                   isPresented: Binding(
+                    get: { exportErrorMessage != nil },
+                    set: { newValue in
+                        if !newValue {
+                            exportErrorMessage = nil
+                        }
+                    }
+                   )) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(exportErrorMessage ?? "Erro desconhecido.")
+            }
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { mostrandoSobreSECID = true }) {
@@ -282,6 +317,85 @@ struct HomeView: View {
         funcionario.regional = ""
 
         return funcionario
+    }
+
+    private func exportarTabelasCSV() {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd_HHmmss"
+        let timestamp = formatter.string(from: Date())
+
+        let funcionariosCSV = montarCSVFuncionarios(Array(funcionarios))
+        let municipiosCSV = montarCSVMunicipios(Array(municipios))
+
+        let tempDir = FileManager.default.temporaryDirectory
+        let funcionariosURL = tempDir.appendingPathComponent("funcionarios_\(timestamp).csv")
+        let municipiosURL = tempDir.appendingPathComponent("municipios_\(timestamp).csv")
+
+        do {
+            try funcionariosCSV.write(to: funcionariosURL, atomically: true, encoding: .utf8)
+            try municipiosCSV.write(to: municipiosURL, atomically: true, encoding: .utf8)
+            exportURLs = [funcionariosURL, municipiosURL]
+            showingCSVExport = true
+        } catch {
+            exportErrorMessage = "Não foi possível salvar os arquivos CSV. \(error.localizedDescription)"
+        }
+    }
+
+    private func montarCSVFuncionarios(_ funcionarios: [Funcionario]) -> String {
+        let header = [
+            "Nome",
+            "Função",
+            "Regional",
+            "Ramal",
+            "Celular",
+            "Email",
+            "Favorito"
+        ]
+        let rows = funcionarios.map { funcionario in
+            [
+                valorCSV(funcionario.nome),
+                valorCSV(funcionario.funcao),
+                valorCSV(funcionario.regional),
+                valorCSV(funcionario.ramal),
+                valorCSV(funcionario.celular),
+                valorCSV(funcionario.email),
+                funcionario.favorito ? "Sim" : "Não"
+            ].joined(separator: ",")
+        }
+        return ([header.joined(separator: ",")] + rows).joined(separator: "\n")
+    }
+
+    private func montarCSVMunicipios(_ municipios: [Municipio]) -> String {
+        let header = [
+            "Município",
+            "Regional",
+            "Favorito",
+            "UUID"
+        ]
+        let rows = municipios.map { municipio in
+            let uuidString = (municipio.id as? UUID)?.uuidString
+                ?? ((municipio.id as? NSUUID).map { ($0 as UUID).uuidString } ?? "")
+            return [
+                valorCSV(municipio.nome),
+                valorCSV(municipio.regional),
+                municipio.favorito ? "Sim" : "Não",
+                valorCSV(uuidString)
+            ].joined(separator: ",")
+        }
+        return ([header.joined(separator: ",")] + rows).joined(separator: "\n")
+    }
+
+    private func valorCSV(_ valor: String?) -> String {
+        let raw = valor?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return escaparCSV(raw)
+    }
+
+    private func escaparCSV(_ valor: String) -> String {
+        var escaped = valor.replacingOccurrences(of: "\"", with: "\"\"")
+        if escaped.contains(",") || escaped.contains("\n") || escaped.contains("\r") || escaped.contains("\"") {
+            escaped = "\"\(escaped)\""
+        }
+        return escaped
     }
 }
 
@@ -391,3 +505,13 @@ struct ZoomableScrollView3<Content: View>: UIViewRepresentable {
     }
 }
 
+struct ActivityView: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    var applicationActivities: [UIActivity]? = nil
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: applicationActivities)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
